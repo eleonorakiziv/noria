@@ -8,6 +8,7 @@ use noria::consensus::Authority;
 use noria::ControllerDescriptor;
 use rand;
 use slog;
+use std::boxed::FnBox;
 use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
