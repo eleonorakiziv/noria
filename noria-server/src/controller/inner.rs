@@ -1265,7 +1265,10 @@ impl ControllerInner {
                         .neighbors_directed(parent, petgraph::EdgeDirection::Outgoing)
                         .count() == 0
                 {
-                   // nodes.push(parent);
+                    if !self.recipe.sql_inc().is_leaf_address(parent) {
+                        // check if it is still included in the recipe
+                        nodes.push(parent);
+                    }
                 }
             }
 
