@@ -1,0 +1,201 @@
+    Finished dev [unoptimized + debuginfo] target(s) in 0.41s
+     Running `target/debug/noria-server --deployment hello --verbose`
+Apr 14 15:48:54.269 INFO became leader at epoch 9870
+Apr 14 15:48:54.282 INFO found initial leader
+Apr 14 15:48:54.283 INFO leader listening on external address V4(127.0.0.1:6033)
+Apr 14 15:48:54.283 DEBG leader's worker listen address: V4(127.0.0.1:55508)
+Apr 14 15:48:54.283 DEBG leader's domain listen address: V4(127.0.0.1:55509)
+Apr 14 15:48:54.284 INFO connected to controller, src: V4(127.0.0.1:55511)
+Apr 14 15:48:54.285 INFO listening for reads, on: V4(127.0.0.1:55512)
+Apr 14 15:48:54.285 WARN Connected to new leader
+Apr 14 15:48:54.290 INFO new worker registered from V4(127.0.0.1:55511), which listens on V4(127.0.0.1:55508)
+Apr 14 15:48:54.452 DEBG 0 duplicate queries, version: 0
+Apr 14 15:48:54.452 INFO starting migration
+Apr 14 15:48:54.452 DEBG 9 queries, 6 of which are named, version: 1
+Apr 14 15:48:54.452 INFO Schema version advanced from 0 to 1
+Apr 14 15:48:54.457 DEBG Assigning primary key (apikey) for base users
+Apr 14 15:48:54.460 INFO adding new base, node: 1
+Apr 14 15:48:54.465 DEBG registering query "users"
+Apr 14 15:48:54.466 DEBG Assigning primary key (id) for base lectures
+Apr 14 15:48:54.467 INFO adding new base, node: 2
+Apr 14 15:48:54.468 DEBG registering query "lectures"
+Apr 14 15:48:54.468 DEBG Assigning primary key (lec, q) for base questions
+Apr 14 15:48:54.469 INFO adding new base, node: 3
+Apr 14 15:48:54.469 DEBG registering query "questions"
+Apr 14 15:48:54.469 DEBG Making QG for "lec_qcount"
+Apr 14 15:48:54.470 INFO No reuse opportunity, adding fresh query
+Apr 14 15:48:54.473 DEBG Added final MIR node for query named "lec_qcount"
+Apr 14 15:48:54.477 INFO adding new node, type: internal |*| γ[0] node, node: 4
+Apr 14 15:48:54.478 INFO adding new node, type: internal π[0, 1] node, node: 5
+Apr 14 15:48:54.478 DEBG registering query "lec_qcount"
+Apr 14 15:48:54.479 DEBG Making QG for "leclist"
+Apr 14 15:48:54.480 INFO No reuse opportunity, adding fresh query
+Apr 14 15:48:54.481 DEBG Added final MIR node for query named "leclist"
+Apr 14 15:48:54.483 INFO adding new node, type: internal [2:0, 2:1, 5:1] 2:0 ⋉ 5:0 node, node: 6
+Apr 14 15:48:54.483 INFO adding new node, type: internal π[0, 1, 2, lit: 0] node, node: 7
+Apr 14 15:48:54.484 DEBG registering query "leclist"
+Apr 14 15:48:54.484 DEBG Making QG for "lecture"
+Apr 14 15:48:54.485 INFO No reuse opportunity, adding fresh query
+Apr 14 15:48:54.485 DEBG Added final MIR node for query named "lecture"
+Apr 14 15:48:54.485 INFO adding new node, type: internal π[0, 1] node, node: 9
+Apr 14 15:48:54.486 DEBG registering query "lecture"
+Apr 14 15:48:54.486 DEBG Making QG for "qs_by_lec"
+Apr 14 15:48:54.486 INFO No reuse opportunity, adding fresh query
+Apr 14 15:48:54.486 DEBG Added final MIR node for query named "qs_by_lec"
+Apr 14 15:48:54.487 INFO adding new node, type: internal π[0, 1, 2] node, node: 11
+Apr 14 15:48:54.487 DEBG registering query "qs_by_lec"
+Apr 14 15:48:54.487 DEBG Making QG for "users_by_apikey"
+Apr 14 15:48:54.488 INFO No reuse opportunity, adding fresh query
+Apr 14 15:48:54.488 DEBG Added final MIR node for query named "users_by_apikey"
+Apr 14 15:48:54.488 INFO adding new node, type: internal π[0, 1] node, node: 13
+Apr 14 15:48:54.489 DEBG registering query "users_by_apikey"
+Apr 14 15:48:54.489 DEBG Making QG for "all_users"
+Apr 14 15:48:54.489 INFO Identified 1 candidate QGs for reuse
+Apr 14 15:48:54.490 DEBG Added final MIR node for query named "all_users"
+Apr 14 15:48:54.490 INFO adding new node, type: internal π[0, lit: 0] node, node: 15
+Apr 14 15:48:54.491 INFO Reused 1 nodes for all_users
+Apr 14 15:48:54.491 DEBG registering query "all_users"
+Apr 14 15:48:54.491 INFO finalizing migration, #nodes: 16
+Apr 14 15:48:54.491 DEBG node added to domain, domain: 0, type: B, node: 1
+Apr 14 15:48:54.492 DEBG node added to domain, domain: 0, type: internal π[0, 1] node, node: 13
+Apr 14 15:48:54.492 DEBG node added to domain, domain: 0, type: reader node, node: 14
+Apr 14 15:48:54.492 DEBG node added to domain, domain: 0, type: internal π[0, lit: 0] node, node: 15
+Apr 14 15:48:54.492 DEBG node added to domain, domain: 0, type: reader node, node: 16
+Apr 14 15:48:54.492 DEBG node added to domain, domain: 1, type: B, node: 2
+Apr 14 15:48:54.492 DEBG node added to domain, domain: 1, type: internal π[0, 1] node, node: 9
+Apr 14 15:48:54.493 DEBG node added to domain, domain: 1, type: reader node, node: 10
+Apr 14 15:48:54.493 DEBG node added to domain, domain: 1, type: B, node: 3
+Apr 14 15:48:54.493 DEBG node added to domain, domain: 1, type: internal |*| γ[0] node, node: 4
+Apr 14 15:48:54.493 DEBG node added to domain, domain: 1, type: internal π[0, 1] node, node: 5
+Apr 14 15:48:54.493 DEBG node added to domain, domain: 1, type: internal [2:0, 2:1, 5:1] 2:0 ⋉ 5:0 node, node: 6
+Apr 14 15:48:54.493 DEBG node added to domain, domain: 1, type: internal π[0, 1, 2, lit: 0] node, node: 7
+Apr 14 15:48:54.493 DEBG node added to domain, domain: 1, type: reader node, node: 8
+Apr 14 15:48:54.493 DEBG node added to domain, domain: 1, type: internal π[0, 1, 2] node, node: 11
+Apr 14 15:48:54.494 DEBG node added to domain, domain: 1, type: reader node, node: 12
+Apr 14 15:48:54.494 DEBG assigning local index, local: 0, node: 1, type: B, domain: 0
+Apr 14 15:48:54.494 DEBG assigning local index, local: 1, node: 13, type: internal π[0, 1] node, domain: 0
+Apr 14 15:48:54.495 DEBG assigning local index, local: 2, node: 14, type: reader node, domain: 0
+Apr 14 15:48:54.495 DEBG assigning local index, local: 3, node: 15, type: internal π[0, lit: 0] node, domain: 0
+Apr 14 15:48:54.495 DEBG assigning local index, local: 4, node: 16, type: reader node, domain: 0
+Apr 14 15:48:54.495 DEBG assigning local index, local: 0, node: 2, type: B, domain: 1
+Apr 14 15:48:54.495 DEBG assigning local index, local: 1, node: 3, type: B, domain: 1
+Apr 14 15:48:54.495 DEBG assigning local index, local: 2, node: 4, type: internal |*| γ[0] node, domain: 1
+Apr 14 15:48:54.495 DEBG assigning local index, local: 3, node: 5, type: internal π[0, 1] node, domain: 1
+Apr 14 15:48:54.496 DEBG assigning local index, local: 4, node: 6, type: internal [2:0, 2:1, 5:1] 2:0 ⋉ 5:0 node, domain: 1
+Apr 14 15:48:54.496 DEBG assigning local index, local: 5, node: 7, type: internal π[0, 1, 2, lit: 0] node, domain: 1
+Apr 14 15:48:54.496 DEBG assigning local index, local: 6, node: 8, type: reader node, domain: 1
+Apr 14 15:48:54.496 DEBG assigning local index, local: 7, node: 9, type: internal π[0, 1] node, domain: 1
+Apr 14 15:48:54.496 DEBG assigning local index, local: 8, node: 10, type: reader node, domain: 1
+Apr 14 15:48:54.496 DEBG assigning local index, local: 9, node: 11, type: internal π[0, 1, 2] node, domain: 1
+Apr 14 15:48:54.497 DEBG assigning local index, local: 10, node: 12, type: reader node, domain: 1
+Apr 14 15:48:54.497 DEBG booting new domains
+Apr 14 15:48:54.499 INFO sending domain 1.0 to worker Ok(V4(127.0.0.1:55508))
+Apr 14 15:48:54.510 INFO booted domain, nodes: 11, shard: 0, domain: 1
+Apr 14 15:48:54.512 INFO informed controller that domain 1.0 is at V4(127.0.0.1:55514)
+Apr 14 15:48:54.512 DEBG accepted new connection, from: V4(127.0.0.1:55516), id: 1.0
+Apr 14 15:48:54.513 INFO sending domain 0.0 to worker Ok(V4(127.0.0.1:55508))
+Apr 14 15:48:54.513 DEBG established new connection, base: false, id: 1.0
+Apr 14 15:48:54.516 INFO booted domain, nodes: 5, shard: 0, domain: 0
+Apr 14 15:48:54.516 INFO informed controller that domain 0.0 is at V4(127.0.0.1:55517)
+Apr 14 15:48:54.516 DEBG accepted new connection, from: V4(127.0.0.1:55519), id: 0.0
+Apr 14 15:48:54.516 DEBG mutating existing domains
+Apr 14 15:48:54.517 INFO bringing up inter-domain connections
+Apr 14 15:48:54.517 INFO initializing new materializations
+Apr 14 15:48:54.517 DEBG established new connection, base: false, id: 0.0
+These are replay obligations: {NodeIndex(14): {[1]}, NodeIndex(12): {[0]}, NodeIndex(8): {[3]}, NodeIndex(16): {[1]}, NodeIndex(10): {[0]}}
+Apr 14 15:48:54.518 INFO adding lookup index to view, columns: [1], node: 1
+Apr 14 15:48:54.518 INFO adding lookup index to view, columns: [0], node: 4
+Apr 14 15:48:54.519 INFO adding lookup index to view, columns: [0], node: 2
+Apr 14 15:48:54.519 INFO adding lookup index to view, columns: [0, 1], node: 3
+Apr 14 15:48:54.519 INFO adding lookup index to view, columns: [0], node: 5
+Apr 14 15:48:54.519 WARN using partial materialization for 12
+Apr 14 15:48:54.519 WARN full because column 3 does not resolve, broken at: 6, node: 8
+Apr 14 15:48:54.519 WARN full because reader below is full, reader: 8, node: 4
+Apr 14 15:48:54.520 WARN full because descendant is full, child: 4, node: 3
+Apr 14 15:48:54.520 INFO adding index to view to enable partial, columns: [0], on: 3
+Apr 14 15:48:54.520 WARN using partial materialization for 10
+Apr 14 15:48:54.520 WARN full because reader below is full, reader: 8, node: 2
+Apr 14 15:48:54.520 WARN full because column 1 does not resolve, broken at: 1, node: 16
+Apr 14 15:48:54.520 WARN using partial materialization for 14
+Apr 14 15:48:54.520 WARN full because reader below is full, reader: 16, node: 1
+Apr 14 15:48:54.522 DEBG new fully-materalized node: B
+Apr 14 15:48:54.522 INFO no need to replay empty new base, node: 1
+Apr 14 15:48:57.069 DEBG new stateless node: internal π[0, 1] node
+Apr 14 15:48:57.069 DEBG no need to replay non-materialized view, node: 13
+Apr 14 15:48:57.085 INFO reconstruction completed, node: 13, ms: 16
+Apr 14 15:48:57.085 DEBG new stateless node: reader node
+Apr 14 15:48:57.085 INFO beginning reconstruction of reader node
+Apr 14 15:48:57.086 INFO domain replay path is [(DomainIndex(0), [(NodeIndex(1), Some([1])), (NodeIndex(13), Some([1])), (NodeIndex(14), Some([1]))])], tag: 0, node: 14
+Apr 14 15:48:57.115 INFO told about replay path [ReplayPathSegment { node: LocalNodeIndex { id: 1 }, partial_key: Some([1]) }, ReplayPathSegment { node: LocalNodeIndex { id: 2 }, partial_key: Some([1]) }], tag: 0, shard: 0, domain: 0
+Apr 14 15:48:57.147 INFO reconstruction completed, node: 14, ms: 61
+Apr 14 15:48:57.147 DEBG new stateless node: internal π[0, lit: 0] node
+Apr 14 15:48:57.148 DEBG no need to replay non-materialized view, node: 15
+Apr 14 15:48:57.166 INFO reconstruction completed, node: 15, ms: 18
+Apr 14 15:48:57.167 DEBG new stateless node: reader node
+Apr 14 15:48:57.167 INFO beginning reconstruction of reader node
+Apr 14 15:48:57.167 INFO domain replay path is [(DomainIndex(0), [(NodeIndex(1), None), (NodeIndex(15), None), (NodeIndex(16), None)])], tag: 1, node: 16
+Apr 14 15:48:57.181 INFO told about terminating replay path [ReplayPathSegment { node: LocalNodeIndex { id: 3 }, partial_key: None }, ReplayPathSegment { node: LocalNodeIndex { id: 4 }, partial_key: None }], tag: 1, shard: 0, domain: 0
+Apr 14 15:48:57.190 INFO starting replay, shard: 0, domain: 0
+Apr 14 15:48:57.295 DEBG current state cloned for replay, μs: 104850, shard: 0, domain: 0
+Apr 14 15:48:57.295 DEBG replaying batch, #: 0, shard: 0, domain: 0
+Apr 14 15:48:57.296 DEBG last batch processed, terminal: true, shard: 0, domain: 0
+Apr 14 15:48:57.297 DEBG last batch received, local: 4, shard: 0, domain: 0
+Apr 14 15:48:57.297 DEBG node is fully up-to-date, passes: 1, local: 4, shard: 0, domain: 0
+Apr 14 15:48:57.297 INFO acknowledging replay completed, node: 4, shard: 0, domain: 0
+Apr 14 15:48:57.324 INFO reconstruction completed, node: 16, ms: 157
+Apr 14 15:48:57.325 DEBG new fully-materalized node: B
+Apr 14 15:48:57.325 INFO no need to replay empty new base, node: 2
+Apr 14 15:48:57.492 DEBG new stateless node: internal π[0, 1] node
+Apr 14 15:48:57.492 DEBG no need to replay non-materialized view, node: 9
+Apr 14 15:48:57.511 INFO reconstruction completed, node: 9, ms: 19
+Apr 14 15:48:57.512 DEBG new stateless node: reader node
+Apr 14 15:48:57.512 INFO beginning reconstruction of reader node
+Apr 14 15:48:57.512 INFO domain replay path is [(DomainIndex(1), [(NodeIndex(2), Some([0])), (NodeIndex(9), Some([0])), (NodeIndex(10), Some([0]))])], tag: 2, node: 10
+Apr 14 15:48:57.531 INFO told about replay path [ReplayPathSegment { node: LocalNodeIndex { id: 7 }, partial_key: Some([0]) }, ReplayPathSegment { node: LocalNodeIndex { id: 8 }, partial_key: Some([0]) }], tag: 2, shard: 0, domain: 1
+Apr 14 15:48:57.573 INFO reconstruction completed, node: 10, ms: 60
+Apr 14 15:48:57.573 DEBG new fully-materalized node: B
+Apr 14 15:48:57.573 INFO no need to replay empty new base, node: 3
+Apr 14 15:48:57.858 DEBG new fully-materalized node: internal |*| γ[0] node
+Apr 14 15:48:57.858 INFO beginning reconstruction of internal |*| γ[0] node
+Apr 14 15:48:57.858 INFO domain replay path is [(DomainIndex(1), [(NodeIndex(3), None), (NodeIndex(4), None)])], tag: 3, node: 4
+Apr 14 15:48:57.869 INFO told about terminating replay path [ReplayPathSegment { node: LocalNodeIndex { id: 2 }, partial_key: None }], tag: 3, shard: 0, domain: 1
+Apr 14 15:48:57.871 INFO told to prepare full state, key: [0], shard: 0, domain: 1
+Apr 14 15:48:57.871 INFO starting replay, shard: 0, domain: 1
+Apr 14 15:48:57.946 DEBG current state cloned for replay, μs: 74495, shard: 0, domain: 1
+Apr 14 15:48:57.946 DEBG replaying batch, #: 0, shard: 0, domain: 1
+Apr 14 15:48:57.948 DEBG last batch processed, terminal: true, shard: 0, domain: 1
+Apr 14 15:48:57.948 DEBG last batch received, local: 2, shard: 0, domain: 1
+Apr 14 15:48:57.948 DEBG node is fully up-to-date, passes: 1, local: 2, shard: 0, domain: 1
+Apr 14 15:48:57.948 INFO acknowledging replay completed, node: 2, shard: 0, domain: 1
+Apr 14 15:48:57.969 INFO reconstruction completed, node: 4, ms: 111
+Apr 14 15:48:57.969 DEBG new stateless node: internal π[0, 1] node
+Apr 14 15:48:57.970 DEBG no need to replay non-materialized view, node: 5
+Apr 14 15:48:57.981 INFO reconstruction completed, node: 5, ms: 11
+Apr 14 15:48:57.982 DEBG new stateless node: internal [2:0, 2:1, 5:1] 2:0 ⋉ 5:0 node
+Apr 14 15:48:57.982 DEBG no need to replay non-materialized view, node: 6
+Apr 14 15:48:57.992 INFO reconstruction completed, node: 6, ms: 10
+Apr 14 15:48:57.992 DEBG new stateless node: internal π[0, 1, 2, lit: 0] node
+Apr 14 15:48:57.992 DEBG no need to replay non-materialized view, node: 7
+Apr 14 15:48:58.004 INFO reconstruction completed, node: 7, ms: 11
+Apr 14 15:48:58.004 DEBG new stateless node: reader node
+Apr 14 15:48:58.004 INFO beginning reconstruction of reader node
+Apr 14 15:48:58.004 INFO domain replay path is [(DomainIndex(1), [(NodeIndex(2), None), (NodeIndex(6), None), (NodeIndex(7), None), (NodeIndex(8), None)])], tag: 4, node: 8
+Apr 14 15:48:58.013 INFO told about terminating replay path [ReplayPathSegment { node: LocalNodeIndex { id: 4 }, partial_key: None }, ReplayPathSegment { node: LocalNodeIndex { id: 5 }, partial_key: None }, ReplayPathSegment { node: LocalNodeIndex { id: 6 }, partial_key: None }], tag: 4, shard: 0, domain: 1
+Apr 14 15:48:58.017 INFO starting replay, shard: 0, domain: 1
+Apr 14 15:48:58.094 DEBG current state cloned for replay, μs: 76167, shard: 0, domain: 1
+Apr 14 15:48:58.094 DEBG replaying batch, #: 0, shard: 0, domain: 1
+Apr 14 15:48:58.094 DEBG last batch processed, terminal: true, shard: 0, domain: 1
+Apr 14 15:48:58.094 DEBG last batch received, local: 6, shard: 0, domain: 1
+Apr 14 15:48:58.094 DEBG node is fully up-to-date, passes: 1, local: 6, shard: 0, domain: 1
+Apr 14 15:48:58.095 INFO acknowledging replay completed, node: 6, shard: 0, domain: 1
+Apr 14 15:48:58.117 INFO reconstruction completed, node: 8, ms: 113
+Apr 14 15:48:58.117 DEBG new stateless node: internal π[0, 1, 2] node
+Apr 14 15:48:58.117 DEBG no need to replay non-materialized view, node: 11
+Apr 14 15:48:58.128 INFO reconstruction completed, node: 11, ms: 10
+Apr 14 15:48:58.128 DEBG new stateless node: reader node
+Apr 14 15:48:58.129 INFO beginning reconstruction of reader node
+Apr 14 15:48:58.129 INFO domain replay path is [(DomainIndex(1), [(NodeIndex(3), Some([0])), (NodeIndex(11), Some([0])), (NodeIndex(12), Some([0]))])], tag: 5, node: 12
+Apr 14 15:48:58.139 INFO told about replay path [ReplayPathSegment { node: LocalNodeIndex { id: 9 }, partial_key: Some([0]) }, ReplayPathSegment { node: LocalNodeIndex { id: 10 }, partial_key: Some([0]) }], tag: 5, shard: 0, domain: 1
+Apr 14 15:48:58.153 INFO reconstruction completed, node: 12, ms: 24
+COMPLETE RECONSTRUCTION of 16 nodes: 3631 ms
+Apr 14 15:48:58.154 WARN migration completed, ms: 3701

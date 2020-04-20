@@ -4,7 +4,9 @@
 //! This module also holds the logic for *identifying* state that must be transfered from other
 //! domains, but does not perform that copying itself (that is the role of the `augmentation`
 //! module).
-
+use std::time::{Duration, Instant};
+use std::fs::OpenOptions;
+use std::io::prelude::*;
 use crate::controller::domain_handle::DomainHandle;
 use crate::controller::{
     inner::{graphviz, DomainReplies},
@@ -18,6 +20,8 @@ use slog::Logger;
 use std::collections::{HashMap, HashSet};
 use std::mem;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::fs::File;
+use std::io::{BufReader, BufRead};
 
 mod plan;
 
@@ -227,6 +231,9 @@ impl Materializations {
                 })
                 .collect()
         }
+        let mut file = OpenOptions::new().append(true).create(true).open("replaycount.txt").unwrap();
+        let _err = write!(&mut file, "{}\n", replay_obligations.len());
+        println!("These are replay obligations: {:?}", replay_obligations);
 
         // lookup obligations are fairly rigid, in that they require a materialization, and can
         // only be pushed through query-through nodes, and never across domains. so, we deal with
@@ -825,7 +832,9 @@ impl Materializations {
             }
         }
 
+        let start_complete = ::std::time::Instant::now();
         // then, we start prepping new nodes
+        let length = &make.len();
         for ni in make {
             let n = &graph[ni];
             let mut index_on = self
@@ -868,7 +877,7 @@ impl Materializations {
                 );
             }
         }
-
+        println!("COMPLETE RECONSTRUCTION ms: {}", start_complete.elapsed().as_millis());
         self.added.clear();
     }
 
@@ -962,10 +971,10 @@ impl Materializations {
             }
             plan.finalize()
         };
-
+        let mut file = OpenOptions::new().append(true).create(true).open("result.txt").unwrap();
         if !pending.is_empty() {
             trace!(self.log, "all domains ready for replay");
-
+            let now = Instant::now();
             // prepare for, start, and wait for replays
             for pending in pending {
                 // tell the first domain to start playing
@@ -993,6 +1002,8 @@ impl Materializations {
             );
 
             replies.wait_for_acks(&domains[&target]);
+            let toWrite = format!("{}", now.elapsed().as_millis());
+            let _err = write!(&mut file, "{}", &toWrite);
         }
     }
 }

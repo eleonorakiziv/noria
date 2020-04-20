@@ -46,7 +46,7 @@ pub(super) struct ControllerInner {
     /// Current recipe
     recipe: Recipe,
 
-    pub(super) domains: HashMap<DomainIndex, DomainHandle>,
+    pub(in crate::controller) domains: HashMap<DomainIndex, DomainHandle>,
     pub(in crate::controller) domain_nodes: HashMap<DomainIndex, Vec<NodeIndex>>,
     pub(super) channel_coordinator: Arc<ChannelCoordinator>,
     pub(super) debug_channel: Option<SocketAddr>,
@@ -886,7 +886,7 @@ impl ControllerInner {
     }
 
     /// Get statistics about the time spent processing different parts of the graph.
-    fn get_statistics(&mut self) -> GraphStats {
+    crate fn get_statistics(&mut self) -> GraphStats {
         trace!(self.log, "asked to get statistics");
         let log = &self.log;
         let workers = &self.workers;
@@ -1116,7 +1116,8 @@ impl ControllerInner {
                 {
                     return Err("Failed to persist recipe extension".to_owned());
                 }
-
+                println!("{}", self.graphviz(true));
+                // println!("Node count: {}", self.ingredients.node_count());
                 activation_result
             }
             Err((old, e)) => {

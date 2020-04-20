@@ -114,9 +114,9 @@ impl<'a> Plan<'a> {
             self.tags.entry(index_on).or_default();
             return;
         }
-
         // inform domains about replay paths
         let mut tags = Vec::new();
+
         for path in self.paths(&index_on[..]) {
             let tag = self.m.next_tag();
             self.paths

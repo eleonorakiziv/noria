@@ -28,6 +28,7 @@ use std::time::Instant;
 
 use petgraph;
 use slog;
+use crate::controller::inner::graphviz;
 
 mod assignment;
 mod augmentation;
@@ -582,5 +583,6 @@ impl<'a> Migration<'a> {
         );
 
         warn!(log, "migration completed"; "ms" => start.elapsed().as_millis());
+
     }
 }

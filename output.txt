@@ -1,0 +1,1 @@
+   Compiling noria-server v0.2.0 (/Users/eleonorakiziv/rust/noria/noria/noria-server)
