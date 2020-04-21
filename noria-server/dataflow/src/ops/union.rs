@@ -80,6 +80,7 @@ impl Union {
                 last = i;
             }
         }
+        println!("emit {:?}", emit);
         let emit: HashMap<_, _> = emit.into_iter().map(|(k, v)| (k.into(), v)).collect();
         let parents = emit.len();
         Union {
