@@ -64,6 +64,7 @@ fn build(prefix: &str, sharding: Option<usize>, log: bool) -> SyncHandle<LocalAu
         builder.log_with(logger_pls());
     }
     builder.set_sharding(sharding);
+    builder.disable_partial();
     builder.set_persistence(get_persistence_params(prefix));
     builder.start_simple().unwrap()
 }
@@ -2550,75 +2551,52 @@ fn remove_compound_query() {
 }
 
 #[test]
-fn add_parent_1() {
-    let mut g = start_simple("add_parent_1");
-    let _ = g.migrate(|mig| {
+fn add_parent() {
+    let mut g = start_simple("add_parent");
+    let (_, _, c) = g.migrate(|mig| {
         let a = mig.add_base("a", &["a", "b"], Base::default());
         let b = mig.add_base("b", &["a", "b"], Base::default());
-        let d = mig.add_base("d", &["a", "b"], Base::default());
 
         let mut emits = HashMap::new();
-        // vec corresponds to the index of columns
         emits.insert(a, vec![0, 1]);
         emits.insert(b, vec![0, 1]);
         let u = Union::new(emits);
         let c = mig.add_ingredient("c", &["a", "b"], u);
         mig.maintain_anonymous(c, &[0]);
-
-        let mut emits2 = HashMap::new();
-        emits2.insert(c, vec![0, 1]);
-        emits2.insert(d, vec![0, 1]);
-        let u2 = Union::new(emits2);
-        let e = mig.add_ingredient("e", &["a", "b"], u2);
-        mig.maintain_anonymous(e, &[0]);
-        (a, b, c, d, e)
+        (a, b, c)
     });
 
     let mut muta = g.table("a").unwrap().into_sync();
     let mut mutb = g.table("b").unwrap().into_sync();
-    let mut mutd = g.table("d").unwrap().into_sync();
     let mut cq = g.view("c").unwrap().into_sync();
-    let mut eq = g.view("e").unwrap().into_sync();
     let id: DataType = 1.into();
 
-    // send a few values on a
     muta.insert(vec![id.clone(), 3.into()]).unwrap();
-
-    // give them some time to propagate
-    sleep();
-
-    // send a query to c
-    // we should see all the a values
     let res = cq.lookup(&[id.clone()], true).unwrap();
     assert_eq!(res.len(), 1);
     assert!(res.iter().any(|r| r == &vec![id.clone(), 3.into()]));
 
     // update value again (and again send some secondary updates)
     mutb.insert(vec![id.clone(), 4.into()]).unwrap();
-
-    // give it some time to propagate
     sleep();
-
-    // check that value was updated again
-    let res = cq.lookup(&[id.clone()], true).unwrap();
-    assert_eq!(res.len(), 2);
-    assert!(res.iter().any(|r| r == &vec![id.clone(), 3.into()]));
-    assert!(res.iter().any(|r| r == &vec![id.clone(), 4.into()]));
-
-    // The second union should contain all the values
-    let res2 = eq.lookup(&[id.clone()], true).unwrap();
+    let res2 = cq.lookup(&[id.clone()], true).unwrap();
     assert_eq!(res2.len(), 2);
     assert!(res2.iter().any(|r| r == &vec![id.clone(), 3.into()]));
     assert!(res2.iter().any(|r| r == &vec![id.clone(), 4.into()]));
+    let _= g.migrate(move |mig| {
+        let d = mig.add_base("d", &["a", "b"], Base::default());
+        mig.add_parent(d, c, vec![0, 1])
+    });
 
-    // Insert a value in d and check it being reflected in e
-    mutd.insert(vec![id.clone(), 7.into()]).unwrap();
-    sleep();
-    let fnl = eq.lookup(&[id.clone()], true).unwrap();
-    assert_eq!(fnl.len(), 3);
-    assert!(fnl.iter().any(|r| r == &vec![id.clone(), 3.into()]));
-    assert!(fnl.iter().any(|r| r == &vec![id.clone(), 4.into()]));
-    assert!(fnl.iter().any(|r| r == &vec![id.clone(), 7.into()]));
-}
+    let mut mutd = g.table("d").unwrap().into_sync();
+    mutd.insert(vec![id.clone(), 10.into()]).unwrap();
 
+    let res4 = cq.lookup(&[id.clone()], true).unwrap();
+    assert_eq!(res4.len(), 4);
+    assert!(res4.iter().any(|r| r == &vec![id.clone(), 3.into()]));
+    assert!(res4.iter().any(|r| r == &vec![id.clone(), 4.into()]));
+    assert!(res4.iter().any(|r| r == &vec![id.clone(), 10.into()]));
+
+
+    println!("{}", g.graphviz().unwrap());
 }

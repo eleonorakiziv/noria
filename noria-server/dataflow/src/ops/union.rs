@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use prelude::*;
+use slog::IgnoreResult;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 enum Emit {
@@ -67,6 +68,7 @@ impl Union {
     /// When receiving an update from node `a`, a union will emit the columns selected in `emit[a]`.
     /// `emit` only supports omitting columns, not rearranging them.
     pub fn new(emit: HashMap<NodeIndex, Vec<usize>>) -> Union {
+
         assert!(!emit.is_empty());
         for emit in emit.values() {
             let mut last = &emit[0];
@@ -80,7 +82,6 @@ impl Union {
                 last = i;
             }
         }
-        println!("emit {:?}", emit);
         let emit: HashMap<_, _> = emit.into_iter().map(|(k, v)| (k.into(), v)).collect();
         let parents = emit.len();
         Union {
@@ -121,6 +122,25 @@ impl Union {
 }
 
 impl Ingredient for Union {
+    fn add_parent_to_union(&mut self, base: NodeIndex, fields: HashMap<NodeIndex, Vec<usize>>) {
+        println!("Adding parent node");
+        self.required += 1;
+        let new_emit: HashMap<IndexPair, Vec<usize>> = fields.into_iter().map(|(k, v)| (k.into(), v)).collect();
+        match self.emit{
+            Emit::AllFrom(p, sh) => println!("Emit all from: {:?} and sharding {:?}", p, sh),
+            Emit::Project  { ref mut emit, ref mut emit_l, .. } => {
+                for (k, v)  in new_emit.into_iter() {
+                    emit.insert(k, v.clone());
+                    if k.has_local() {
+                        println!("Inserting {:?}", *k);
+                        emit_l.insert(*k, v);
+                    }
+                };
+                println!("New emit {:?}", emit_l.clone());
+            },
+        }
+    }
+
     fn take(&mut self) -> NodeOperator {
         Clone::clone(self).into()
     }
@@ -205,6 +225,9 @@ impl Ingredient for Union {
 
                         // yield selected columns for this source
                         // TODO: if emitting all in same order then avoid clone
+                        println!("r: {:?}, pos: {:?}", r, pos);
+                        println!("from: {:?}", from);
+                        println!("EMITL: {:?}", emit_l);
                         let res = emit_l[&from].iter().map(|&col| r[col].clone()).collect();
 
                         // return new row with appropriate sign
@@ -482,6 +505,7 @@ impl Ingredient for Union {
                                     })
                                     .collect(),
                             );
+                            println!("Replay keys are {:?}", self.replay_key);
                         }
                     }
                     self.replay_key_orig = key_cols.clone();
@@ -633,8 +657,7 @@ impl Ingredient for Union {
         });
     }
 
-    fn suggest_indexes(&self, _: NodeIndex) -> HashMap<NodeIndex, Vec<usize>> {
-        // index nothing (?)
+    fn suggest_indexes(&self, n: NodeIndex) -> HashMap<NodeIndex, Vec<usize>> {
         HashMap::new()
     }
 

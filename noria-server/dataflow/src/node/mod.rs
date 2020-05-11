@@ -13,7 +13,8 @@ pub mod special;
 pub use self::special::StreamUpdate;
 
 mod ntype;
-pub use self::ntype::NodeType; // crate viz for tests
+pub use self::ntype::NodeType;
+use ops::NodeOperator::Union; // crate viz for tests
 
 mod debug;
 
@@ -166,6 +167,15 @@ impl Node {
     ///    ⋃    |  Union
     pub fn description(&self, detailed: bool) -> String {
         Ingredient::description(&**self, detailed)
+    }
+
+    pub fn add_parent_to_union(&mut self, n: NodeIndex, fields: HashMap<NodeIndex, Vec<usize>>)
+    {
+        if let NodeType::Internal(NodeOperator::Union(ref mut u)) = self.inner {
+            u.add_parent_to_union(n, fields);
+        } else {
+            unreachable!("only union nodes implement add_parent_to_union");
+        }
     }
 }
 

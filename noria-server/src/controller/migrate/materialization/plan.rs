@@ -98,6 +98,7 @@ impl<'a> Plan<'a> {
 
         // all columns better resolve if we're doing partial
         assert!(!self.partial || paths.iter().all(|p| p[0].1.iter().all(Option::is_some)));
+        println!("PATHS: {:?}", paths);
 
         paths
     }
@@ -117,6 +118,7 @@ impl<'a> Plan<'a> {
 
         // inform domains about replay paths
         let mut tags = Vec::new();
+        println!("Index on {:?}", index_on);
         for path in self.paths(&index_on[..]) {
             let tag = self.m.next_tag();
             self.paths

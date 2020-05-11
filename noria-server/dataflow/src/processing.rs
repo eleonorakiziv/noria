@@ -284,4 +284,6 @@ where
     fn requires_full_materialization(&self) -> bool {
         false
     }
+
+    fn add_parent_to_union(&mut self, n: NodeIndex, fields: HashMap<NodeIndex, Vec<usize>>) {}
 }

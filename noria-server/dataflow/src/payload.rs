@@ -84,21 +84,21 @@ pub struct SourceChannelIdentifier {
 pub enum Packet {
     // Data messages
     //
-    Input {
+    Input { //0
         inner: LocalOrNot<Input>,
         src: Option<SourceChannelIdentifier>,
         senders: Vec<SourceChannelIdentifier>,
     },
 
     /// Regular data-flow update.
-    Message {
+    Message { //1
         link: Link,
         data: Records,
         tracer: Tracer,
     },
 
     /// Update that is part of a tagged data-flow replay path.
-    ReplayPiece {
+    ReplayPiece {//2
         link: Link,
         tag: Tag,
         data: Records,
@@ -106,14 +106,14 @@ pub enum Packet {
     },
 
     /// Trigger an eviction from the target node.
-    Evict {
+    Evict { //3
         node: Option<LocalNodeIndex>,
         num_bytes: usize,
     },
 
     /// Evict the indicated keys from the materialization targed by the replay path `tag` (along
     /// with any other materializations below it).
-    EvictKeys {
+    EvictKeys { //4
         link: Link,
         tag: Tag,
         keys: Vec<Vec<DataType>>,
@@ -122,36 +122,37 @@ pub enum Packet {
     //
     // Internal control
     //
-    Finish(Tag, LocalNodeIndex),
+    Finish(Tag, LocalNodeIndex), //5
 
     // Control messages
     //
     /// Add a new node to this domain below the given parents.
-    AddNode {
+    AddNode { //6
         node: Node,
         parents: Vec<LocalNodeIndex>,
+        children: Vec<LocalNodeIndex>,
     },
 
     /// Direct domain to remove some nodes.
-    RemoveNodes {
+    RemoveNodes { //7
         nodes: Vec<LocalNodeIndex>,
     },
 
     /// Add a new column to an existing `Base` node.
-    AddBaseColumn {
+    AddBaseColumn { // 8
         node: LocalNodeIndex,
         field: String,
         default: DataType,
     },
 
     /// Drops an existing column from a `Base` node.
-    DropBaseColumn {
+    DropBaseColumn { //9
         node: LocalNodeIndex,
         column: usize,
     },
 
     /// Update Egress node.
-    UpdateEgress {
+    UpdateEgress { // 10
         node: LocalNodeIndex,
         new_tx: Option<(NodeIndex, LocalNodeIndex, ReplicaAddr)>,
         new_tag: Option<(Tag, NodeIndex)>,
@@ -160,13 +161,13 @@ pub enum Packet {
     /// Add a shard to a Sharder node.
     ///
     /// Note that this *must* be done *before* the sharder starts being used!
-    UpdateSharder {
+    UpdateSharder { //11
         node: LocalNodeIndex,
         new_txs: (LocalNodeIndex, Vec<ReplicaAddr>),
     },
 
     /// Add a streamer to an existing reader node.
-    AddStreamer {
+    AddStreamer { //12
         node: LocalNodeIndex,
         new_streamer: channel::StreamSender<Vec<node::StreamUpdate>>,
     },
@@ -174,18 +175,18 @@ pub enum Packet {
     /// Set up a fresh, empty state for a node, indexed by a particular column.
     ///
     /// This is done in preparation of a subsequent state replay.
-    PrepareState {
+    PrepareState {// 13
         node: LocalNodeIndex,
         state: InitialState,
     },
 
     /// Probe for the number of records in the given node's state
-    StateSizeProbe {
+    StateSizeProbe { // 14
         node: LocalNodeIndex,
     },
 
     /// Inform domain about a new replay path.
-    SetupReplayPath {
+    SetupReplayPath { //15
         tag: Tag,
         source: Option<LocalNodeIndex>,
         path: Vec<ReplayPathSegment>,
@@ -194,45 +195,45 @@ pub enum Packet {
     },
 
     /// Ask domain (nicely) to replay a particular key.
-    RequestPartialReplay {
+    RequestPartialReplay { //16
         tag: Tag,
         key: Vec<DataType>,
         unishard: bool,
     },
 
     /// Ask domain (nicely) to replay a particular key into a Reader.
-    RequestReaderReplay {
+    RequestReaderReplay { //17
         node: LocalNodeIndex,
         cols: Vec<usize>,
         key: Vec<DataType>,
     },
 
     /// Instruct domain to replay the state of a particular node along an existing replay path.
-    StartReplay {
+    StartReplay { //18
         tag: Tag,
         from: LocalNodeIndex,
     },
 
     /// Sent to instruct a domain that a particular node should be considered ready to process
     /// updates.
-    Ready {
+    Ready { // 19
         node: LocalNodeIndex,
         purge: bool,
         index: HashSet<Vec<usize>>,
     },
 
     /// Notification from Blender for domain to terminate
-    Quit,
+    Quit, //20
 
     /// A packet used solely to drive the event loop forward.
-    Spin,
+    Spin, //21
 
     /// Request that a domain send usage statistics on the control reply channel.
     /// Argument specifies if we wish to get the full state size or just the partial nodes.
-    GetStatistics,
+    GetStatistics, //22
 
     /// Ask domain to log its state size
-    UpdateStateSize,
+    UpdateStateSize, //23
 }
 
 impl Packet {
@@ -381,6 +382,12 @@ impl fmt::Debug for Packet {
             }
             Packet::RequestPartialReplay { ref tag, .. } => {
                 write!(f, "Packet::RequestPartialReplay({:?})", tag)
+            },
+            Packet::AddNode {ref node, ref parents, ref children} => {
+                write!(f, "Packet::AddNode({:?})(parents:{:?}) children {:?}", node, parents, children)
+            },
+            Packet::Ready {ref node, ref purge, ref index} => {
+                write!(f, "Packet::Ready node {:?}, purge: {:?}, index {:?}", node, purge, index)
             }
             Packet::ReplayPiece {
                 ref link,

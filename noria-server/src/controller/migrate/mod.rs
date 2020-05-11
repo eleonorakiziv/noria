@@ -131,6 +131,34 @@ impl<'a> Migration<'a> {
         ni
     }
 
+    ///
+    /// Adds a parent to given node
+    ///
+    pub fn add_parent(&mut self, parent: NodeIndex, child:NodeIndex, fields: Vec<usize>) -> NodeIndex
+    {
+        let mut child_ingredient = &mut self.mainline.ingredients[child];
+        let mut parents = child_ingredient.ancestors();
+        assert!(!parents.is_empty());
+        parents.push(parent);
+        // <NodeIndex, Vec<usize>>
+
+        let mut hm = HashMap::new();
+        hm.insert(parent, fields);
+        println!("Hash map {:?}",hm);
+
+        child_ingredient.add_parent_to_union(parent, hm);
+
+        // // keep track of the fact that it's new
+        // self.added.insert();
+
+        // insert it into the graph
+        self.mainline.ingredients.add_edge(parent, child, ());
+
+
+        // and tell the caller its id
+        child
+    }
+
     /// Mark the given node as being beyond the materialization frontier.
     ///
     /// When a node is marked as such, it will quickly evict state after it is no longer
@@ -406,6 +434,7 @@ impl<'a> Migration<'a> {
 
                 let mut ip: IndexPair = ni.into();
                 ip.set_local(unsafe { LocalNodeIndex::make(nnodes as u32) });
+                println!("Set local of {:?} to {:?}", ni, *ip);
                 mainline.ingredients[ni].set_finalized_addr(ip);
                 mainline
                     .remap
@@ -493,6 +522,7 @@ impl<'a> Migration<'a> {
                 (di, m)
             })
             .collect();
+
 
         // Boot up new domains (they'll ignore all updates for now)
         debug!(log, "booting new domains");

@@ -745,9 +745,10 @@ impl Domain {
                 self.handle_eviction(m, sends);
             }
             consumed => {
+                println!("consumed {:?}", consumed);
                 match consumed {
                     // workaround #16223
-                    Packet::AddNode { node, parents } => {
+                    Packet::AddNode { mut node, parents, children } => {
                         let addr = node.local_addr();
                         self.not_ready.insert(addr);
 
@@ -758,8 +759,11 @@ impl Domain {
                                 .borrow_mut()
                                 .add_child(node.local_addr());
                         }
+                        for c in children {
+                            node.add_child(c)
+                        }
                         self.nodes.insert(addr, cell::RefCell::new(node));
-                        trace!(self.log, "new node incorporated"; "local" => addr.id());
+                        debug!(self.log, "new node incorporated"; "local" => addr.id());
                     }
                     Packet::RemoveNodes { nodes } => {
                         for &node in &nodes {

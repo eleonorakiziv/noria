@@ -26,7 +26,7 @@ pub(super) fn inform(
         let log = log.new(o!("domain" => domain.index()));
         let ctx = controller.domains.get_mut(&domain).unwrap();
 
-        trace!(log, "domain ready for migration");
+        debug!(log, "domain ready for migration");
 
         let old_nodes: HashSet<_> = nodes
             .iter()
@@ -52,12 +52,20 @@ pub(super) fn inform(
                 .filter(|n| n.domain() == domain)
                 .map(|n| n.local_addr())
                 .collect();
-
-            trace!(log, "request addition of node"; "node" => ni.index());
+            let old_children = graph
+                .neighbors_directed(ni, petgraph::EdgeDirection::Outgoing)
+                .filter(|ni| old_nodes.contains(ni))
+                .map(|ni| &graph[ni])
+                .filter(|n| n.domain() == domain)
+                .map(|n| n.local_addr())
+                .collect();
+            println!("INFORM. node: {:?}, parents :{:?}", node, old_parents);
+            debug!(log, "request addition of node"; "node" => ni.index());
             ctx.send_to_healthy(
                 box Packet::AddNode {
                     node,
                     parents: old_parents,
+                    children: old_children,
                 },
                 &controller.workers,
             )

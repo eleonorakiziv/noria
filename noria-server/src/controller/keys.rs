@@ -97,6 +97,7 @@ where
                 by_ancestor
             },
         );
+    println!("{:?}", resolved);
     assert!(!resolved.is_empty(), "Some(col) resolved into no ancestors");
 
     // are any of the columns generated?
@@ -145,6 +146,7 @@ where
             path.push((parent, columns));
             paths.extend(trace(graph, on_join, path));
         }
+        println!("PATHS in trace: {:?}", paths);
         return paths;
     }
 
