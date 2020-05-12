@@ -357,7 +357,7 @@ impl<'a> Plan<'a> {
                     }
                 }
 
-                trace!(self.m.log, "telling domain about replay path"; "domain" => domain.index());
+                debug!(self.m.log, "telling domain about replay path"; "domain" => domain.index());
                 let ctx = self.domains.get_mut(&domain).unwrap();
                 ctx.send_to_healthy(setup, self.workers).unwrap();
                 replies.wait_for_acks(&ctx);

@@ -317,7 +317,7 @@ impl DerefMut for Node {
 
 // neighbors
 impl Node {
-    crate fn children(&self) -> &[LocalNodeIndex] {
+    pub fn children(&self) -> &[LocalNodeIndex] {
         &self.children
     }
 
@@ -393,7 +393,7 @@ impl Node {
     }
 
     pub fn add_to(&mut self, domain: domain::Index) {
-        assert_eq!(self.domain, None);
+       // assert_eq!(self.domain, None);
         assert!(!self.is_dropped());
         self.domain = Some(domain);
     }
@@ -401,6 +401,7 @@ impl Node {
     pub fn set_finalized_addr(&mut self, addr: IndexPair) {
         self.index = Some(addr);
     }
+
 }
 
 // is this or that?
@@ -479,6 +480,14 @@ impl Node {
     pub fn is_shard_merger(&self) -> bool {
         if let NodeType::Internal(NodeOperator::Union(ref u)) = self.inner {
             u.is_shard_merger()
+        } else {
+            false
+        }
+    }
+
+    pub fn is_union(&self) -> bool {
+        if let NodeType::Internal(NodeOperator::Union(..)) = self.inner {
+            true
         } else {
             false
         }

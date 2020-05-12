@@ -1,5 +1,5 @@
 /// Describe the materialization state of an operator.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum MaterializationStatus {
     /// Operator's state is not materialized.
     Not,

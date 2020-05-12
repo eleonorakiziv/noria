@@ -18,6 +18,7 @@ use slog::Logger;
 use std::collections::{HashMap, HashSet};
 use std::mem;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use failure::_core::hash::Hash;
 
 mod plan;
 
@@ -57,6 +58,8 @@ pub(in crate::controller) struct Materializations {
     frontier_strategy: FrontierStrategy,
 
     tag_generator: AtomicUsize,
+
+    to_add: HashMap<NodeIndex, Indices>,
 }
 
 impl Materializations {
@@ -73,6 +76,8 @@ impl Materializations {
             frontier_strategy: FrontierStrategy::None,
 
             tag_generator: AtomicUsize::default(),
+
+            to_add: HashMap::default(),
         }
     }
 
@@ -714,6 +719,7 @@ impl Materializations {
                 }
             }
         }
+
         while let Some(ni) = non_purge.pop() {
             if graph[ni].purge {
                 println!("{}", graphviz(graph, true, &self));
@@ -738,6 +744,11 @@ impl Materializations {
         let mut make = Vec::with_capacity(new.len());
         let mut topo = petgraph::visit::Topo::new(&*graph);
         while let Some(node) = topo.next(&*graph) {
+            let new_parents: Vec<_> = graph
+                .neighbors_directed(node, petgraph::EdgeDirection::Incoming)
+                .filter(|n| new.contains(&n))
+                .collect();
+
             if graph[node].is_source() {
                 continue;
             }
@@ -749,12 +760,28 @@ impl Materializations {
                 make.push(node);
             } else if self.added.contains_key(&node) {
                 reindex.push(node);
+            } else if !new_parents.is_empty() {
+
+                // find the index_on and push it to self.to_add
+                let curr = &graph[node];
+                let num_cols = (&curr).fields().len();
+
+                let indices : Vec<usize> = (0..num_cols)
+                    .into_iter()
+                    .filter_map(|f| curr.resolve(f))
+                    .flatten()
+                    .filter(|(ni, _col)| new.contains(&ni))
+                    .map(|(_ni, col)| col)
+
+                    .collect();
+                self.to_add.entry(node).or_default().insert(indices);
             }
         }
 
         // first, we add any new indices to existing nodes
         for node in reindex {
             let mut index_on = self.added.remove(&node).unwrap();
+
 
             // are they trying to make a non-materialized node materialized?
             if self.have[&node] == index_on {
@@ -987,7 +1014,7 @@ impl Materializations {
 
             // and then wait for the last domain to receive all the records
             let target = graph[ni].domain();
-            trace!(self.log,
+            debug!(self.log,
                "waiting for done message from target";
                "domain" => target.index(),
             );

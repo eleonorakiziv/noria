@@ -105,7 +105,7 @@ impl Reader {
     }
 
     crate fn set_write_handle(&mut self, wh: backlog::WriteHandle) {
-        assert!(self.writer.is_none());
+       // assert!(self.writer.is_none());
         self.writer = Some(wh);
     }
 

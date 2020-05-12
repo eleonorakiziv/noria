@@ -749,7 +749,7 @@ impl Domain {
                 match consumed {
                     // workaround #16223
                     Packet::AddNode { mut node, parents, children } => {
-                        let addr = node.local_addr();
+                        let addr = (&node).local_addr();
                         self.not_ready.insert(addr);
 
                         for p in parents {
@@ -757,10 +757,15 @@ impl Domain {
                                 .get_mut(p)
                                 .unwrap()
                                 .borrow_mut()
-                                .add_child(node.local_addr());
+                                .add_child((&node).local_addr());
                         }
                         for c in children {
-                            node.add_child(c)
+                            &node.add_child(c);
+                            // self.nodes
+                            //     .get_mut(c)
+                            //     .unwrap()
+                            //     .borrow_mut()
+                            //     .add_ancestor(&node);
                         }
                         self.nodes.insert(addr, cell::RefCell::new(node));
                         debug!(self.log, "new node incorporated"; "local" => addr.id());
@@ -944,12 +949,12 @@ impl Domain {
 
                                 let mut n = self.nodes[node].borrow_mut();
                                 n.with_reader_mut(|r| {
-                                    assert!(self
-                                        .readers
-                                        .lock()
-                                        .unwrap()
-                                        .insert((gid, *self.shard.as_ref().unwrap_or(&0)), r_part)
-                                        .is_none());
+                                    // assert!(self
+                                    //     .readers
+                                    //     .lock()
+                                    //     .unwrap()
+                                    //     .insert((gid, *self.shard.as_ref().unwrap_or(&0)), r_part)
+                                    //     .is_none());
 
                                     // make sure Reader is actually prepared to receive state
                                     r.set_write_handle(w_part)
@@ -1083,7 +1088,7 @@ impl Domain {
 
                         let start = time::Instant::now();
                         self.total_replay_time.start();
-                        info!(self.log, "starting replay");
+                        info!(self.log, "starting replay from {:?}", from);
 
                         // we know that the node is materialized, as the migration coordinator
                         // picks path that originate with materialized nodes. if this weren't the

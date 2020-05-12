@@ -148,8 +148,8 @@ impl<'a> Migration<'a> {
 
         child_ingredient.add_parent_to_union(parent, hm);
 
-        // // keep track of the fact that it's new
-        // self.added.insert();
+        // keep track of the fact that child is new
+        self.added.insert(parent);
 
         // insert it into the graph
         self.mainline.ingredients.add_edge(parent, child, ());
