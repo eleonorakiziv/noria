@@ -60,6 +60,7 @@ pub(in crate::controller) struct Materializations {
     tag_generator: AtomicUsize,
 
     to_add: HashMap<NodeIndex, Indices>,
+    paths_ending_at: HashMap<NodeIndex, Vec<Vec<(NodeIndex, Vec<Option<usize>>)>>>, // paths ending at a specific index
 }
 
 impl Materializations {
@@ -78,6 +79,7 @@ impl Materializations {
             tag_generator: AtomicUsize::default(),
 
             to_add: HashMap::default(),
+            paths_ending_at: HashMap::default(),
         }
     }
 

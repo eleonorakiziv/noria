@@ -98,7 +98,7 @@ impl<'a> Plan<'a> {
 
         // all columns better resolve if we're doing partial
         assert!(!self.partial || paths.iter().all(|p| p[0].1.iter().all(Option::is_some)));
-        println!("PATHS: {:?}", paths);
+        println!("PATHS in paths: {:?}", paths);
 
         paths
     }
@@ -118,8 +118,14 @@ impl<'a> Plan<'a> {
 
         // inform domains about replay paths
         let mut tags = Vec::new();
-        println!("Index on {:?}", index_on);
         for path in self.paths(&index_on[..]) {
+            let ni = path.last().unwrap().0;
+            if self.m.paths_ending_at.contains_key(&ni) && self.m.paths_ending_at.get(&ni).unwrap().contains(&path) {
+                println!("Encountered an existing path: {:?}", path);
+                continue
+            }
+            self.m.paths_ending_at.entry(ni).or_insert(Vec::new()).push(path.clone());
+
             let tag = self.m.next_tag();
             self.paths
                 .insert(tag, path.iter().map(|&(ni, _)| ni).collect());
