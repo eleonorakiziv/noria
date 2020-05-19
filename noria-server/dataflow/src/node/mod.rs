@@ -169,12 +169,21 @@ impl Node {
         Ingredient::description(&**self, detailed)
     }
 
-    pub fn add_parent_to_union(&mut self, n: NodeIndex, fields: HashMap<NodeIndex, Vec<usize>>)
+    pub fn add_parent_to_union(&mut self, fields: HashMap<NodeIndex, Vec<usize>>)
     {
         if let NodeType::Internal(NodeOperator::Union(ref mut u)) = self.inner {
-            u.add_parent_to_union(n, fields);
+            u.add_parent_to_union(fields);
         } else {
             unreachable!("only union nodes implement add_parent_to_union");
+        }
+    }
+
+    pub fn update_unassigned(&mut self, ip: IndexPair)
+    {
+        if let NodeType::Internal(NodeOperator::Union(ref mut u)) = self.inner {
+            u.update_unassigned(ip);
+        } else {
+            unreachable!("only union nodes could update unassigned");
         }
     }
 }

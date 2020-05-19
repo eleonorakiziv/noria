@@ -136,7 +136,7 @@ impl<'a> Migration<'a> {
     ///
     pub fn add_parent(&mut self, parent: NodeIndex, child:NodeIndex, fields: Vec<usize>) -> NodeIndex
     {
-        let mut child_ingredient = &mut self.mainline.ingredients[child];
+        let child_ingredient = &mut self.mainline.ingredients[child];
         let mut parents = child_ingredient.ancestors();
         assert!(!parents.is_empty());
         parents.push(parent);
@@ -144,9 +144,9 @@ impl<'a> Migration<'a> {
 
         let mut hm = HashMap::new();
         hm.insert(parent, fields);
-        println!("Hash map {:?}",hm);
+        println!("NEW PARENT Hash map {:?}",hm);
 
-        child_ingredient.add_parent_to_union(parent, hm);
+        child_ingredient.add_parent_to_union(hm);
 
         // keep track of the fact that child is new
         self.added.insert(parent);
@@ -442,6 +442,22 @@ impl<'a> Migration<'a> {
                     .or_insert_with(HashMap::new)
                     .insert(ni, ip);
                 nnodes += 1;
+
+                // update the emits if a parent of a union node
+                let union_children: Vec<_> = mainline
+                    .ingredients
+                    .neighbors_directed(ni, petgraph::EdgeDirection::Outgoing)
+                    .filter(|&ci| mainline.ingredients[ci].is_union())
+                    .map(|ci| ci) // I do not think I will need this!
+                    .collect();
+
+                union_children
+                    .into_iter()
+                    .for_each(|ci| {
+                        println!("Child is {:?}", ci);
+                        mainline.ingredients[ci].update_unassigned(ip)
+                    });
+
             }
 
             // Initialize each new node

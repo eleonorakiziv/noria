@@ -772,7 +772,6 @@ impl Materializations {
                     .flatten()
                     .filter(|(ni, _col)| new.contains(&ni))
                     .map(|(_ni, col)| col)
-
                     .collect();
                 self.to_add.entry(node).or_default().insert(indices);
             }
@@ -864,10 +863,6 @@ impl Materializations {
                 })
                 .unwrap_or_else(HashSet::new);
 
-            let start = ::std::time::Instant::now();
-            self.ready_one(ni, &mut index_on, graph, domains, workers, replies);
-            let reconstructed = index_on.is_empty();
-
             // communicate to the domain in charge of a particular node that it should start
             // delivering updates to a given new node. note that we wait for the domain to
             // acknowledge the change. this is important so that we don't ready a child in a
@@ -880,13 +875,17 @@ impl Materializations {
                     box Packet::Ready {
                         node: n.local_addr(),
                         purge: n.purge,
-                        index: index_on,
+                        index: index_on.clone(),
                     },
                     workers,
                 )
                 .unwrap();
             replies.wait_for_acks(&domain);
             debug!(self.log, "node ready"; "node" => ni.index());
+
+            let start = ::std::time::Instant::now();
+            self.ready_one(ni, &mut index_on, graph, domains, workers, replies);
+            let reconstructed = index_on.is_empty();
 
             if reconstructed {
                 info!(self.log, "reconstruction completed";
@@ -927,6 +926,34 @@ impl Materializations {
             // a new base must be empty, so we can materialize it immediately
             info!(self.log, "no need to replay empty new base"; "node" => ni.index());
             assert!(!self.partial.contains(&ni));
+
+            // setup new replay paths
+            if !self.to_add.is_empty() {
+                let mut materialized = Vec::new();
+                for (ni, _ind) in &self.to_add {
+                    let curr = &graph[*ni];
+                    match self.get_status(*ni, curr) {
+                        MaterializationStatus::Not => {
+                            graph
+                                .neighbors_directed(*ni, petgraph::EdgeDirection::Outgoing)
+                                .map(|n| &graph[n])
+                                .filter(|node| node.is_reader() && !node.is_base())
+                                .map(|r| r.global_addr())
+                                .for_each(|index| materialized.push(index))
+                        },
+                        _ => {
+                            materialized.push(*ni)
+                        }
+                    }
+                }
+                for node in materialized {
+                    println!("Setup new paths for {:?}", node);
+                    // TODO: Add only necessary paths
+                    let mut index_on = HashSet::new();
+                    self.setup(node, &mut index_on, graph, domains, workers, replies); // mutable reference
+                }
+                self.to_add.clear();
+            }
             return;
         }
 

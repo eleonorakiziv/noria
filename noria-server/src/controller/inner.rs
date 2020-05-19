@@ -1385,7 +1385,7 @@ impl ControllerInner {
         let updated = self.recipe.clone();
         let replaced = old.replace(updated).unwrap();
 
-        let activation_result = self.apply_recipe(replaced);
+        self.apply_recipe(replaced);
         if authority
             .read_modify_write(STATE_KEY, |state: Option<ControllerState>| match state {
                 None => unreachable!(),

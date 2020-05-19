@@ -1,7 +1,6 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use prelude::*;
-use slog::IgnoreResult;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 enum Emit {
@@ -46,6 +45,8 @@ pub struct Union {
     required: usize,
 
     full_wait_state: FullWait,
+
+    unassigned: HashMap<NodeIndex, Vec<usize>>,
 }
 
 impl Clone for Union {
@@ -58,6 +59,7 @@ impl Clone for Union {
             replay_key: None,
             replay_pieces: HashMap::new(),
             full_wait_state: FullWait::None,
+            unassigned: self.unassigned.clone()
         }
     }
 }
@@ -96,6 +98,7 @@ impl Union {
             replay_key: None,
             replay_pieces: HashMap::new(),
             full_wait_state: FullWait::None,
+            unassigned: HashMap::new(),
         }
     }
 
@@ -109,6 +112,7 @@ impl Union {
             replay_key: None,
             replay_pieces: HashMap::new(),
             full_wait_state: FullWait::None,
+            unassigned: HashMap::new(),
         }
     }
 
@@ -122,22 +126,40 @@ impl Union {
 }
 
 impl Ingredient for Union {
-    fn add_parent_to_union(&mut self, base: NodeIndex, fields: HashMap<NodeIndex, Vec<usize>>) {
-        println!("Adding parent node");
+    fn add_parent_to_union(&mut self, fields: HashMap<NodeIndex, Vec<usize>>) {
         self.required += 1;
         let new_emit: HashMap<IndexPair, Vec<usize>> = fields.into_iter().map(|(k, v)| (k.into(), v)).collect();
         match self.emit{
             Emit::AllFrom(p, sh) => println!("Emit all from: {:?} and sharding {:?}", p, sh),
-            Emit::Project  { ref mut emit, ref mut emit_l, .. } => {
+            Emit::Project { ref mut emit, ref mut emit_l, .. } => {
                 for (k, v)  in new_emit.into_iter() {
                     emit.insert(k, v.clone());
                     if k.has_local() {
-                        println!("Inserting {:?}", *k);
                         emit_l.insert(*k, v);
+                    } else {
+                        self.unassigned.entry(k.as_global()).or_insert(v);
                     }
                 };
                 println!("New emit {:?}", emit_l.clone());
             },
+        }
+        println!("End of add_parent_to_union {:?}", self.unassigned);
+    }
+
+    fn update_unassigned(&mut self, ip: IndexPair) {
+        match self.emit {
+            Emit::AllFrom(..) => println!("Emit all from"),
+            Emit::Project { ref mut emit_l, ..} => {
+                if ip.has_local() {
+                    println!("Inserting index pair {:?}", ip);
+                    let ni = ip.as_global();
+                    if self.unassigned.contains_key(&ni) {
+                        let cols = self.unassigned.get(&ni).unwrap();
+                        emit_l.insert(*ip, cols.clone());
+                    }
+                }
+                println!("Update unassigned end {:?}", emit_l);
+            }
         }
     }
 
@@ -212,6 +234,8 @@ impl Ingredient for Union {
         _: &DomainNodes,
         _: &StateMap,
     ) -> ProcessingResult {
+        println!("anc {:?}", self.ancestors().clone());
+        println!("info {:?}", self.clone());
         match self.emit {
             Emit::AllFrom(..) => ProcessingResult {
                 results: rs,
@@ -657,7 +681,7 @@ impl Ingredient for Union {
         });
     }
 
-    fn suggest_indexes(&self, n: NodeIndex) -> HashMap<NodeIndex, Vec<usize>> {
+    fn suggest_indexes(&self, _n: NodeIndex) -> HashMap<NodeIndex, Vec<usize>> {
         HashMap::new()
     }
 

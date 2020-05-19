@@ -285,5 +285,7 @@ where
         false
     }
 
-    fn add_parent_to_union(&mut self, n: NodeIndex, fields: HashMap<NodeIndex, Vec<usize>>) {}
+    fn add_parent_to_union(&mut self, _fields: HashMap<NodeIndex, Vec<usize>>) {}
+
+    fn update_unassigned(&mut self, _ip: IndexPair) {}
 }
