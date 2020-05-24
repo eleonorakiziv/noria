@@ -758,19 +758,16 @@ impl Domain {
                                 .get_mut(p)
                                 .unwrap()
                                 .borrow_mut()
-                                .add_child(node.local_addr());
+                                .add_child(addr);
                         }
                         self.nodes.insert(addr, cell::RefCell::new(node));
-
                         for (c, meta) in union_children.iter() {
-                            // add child to parent
-                            self.nodes.get_mut(addr).unwrap().borrow_mut().add_child(*c);
+                            // we don't need to add child to parent, since the node has been "finalized" already
                             // add parent to child
                             self.nodes.get_mut(*c).unwrap().borrow_mut().add_parent(addr);
                             // update the child's metadata
                             self.nodes.get_mut(*c).unwrap().borrow_mut().set_metadata(meta.clone());
                         }
-
                         debug!(self.log, "new node incorporated"; "local" => addr.id());
                     }
                     Packet::RemoveNodes { nodes } => {

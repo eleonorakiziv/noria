@@ -2574,15 +2574,13 @@ fn add_parent() {
         let d = mig.add_base("d", &["a", "b"], Base::default());
         mig.add_parent(d, c, vec![0, 1])
     });
-
     let mut mutd = g.table("d").unwrap().into_sync();
     mutd.insert(vec![id.clone(), 10.into()]).unwrap();
     sleep();
 
-    println!("Looking up");
     let res = cq.lookup(&[id.clone()], true).unwrap();
-    println!("Result: {:?}", res);
     assert!(res.iter().any(|r| r == &vec![id.clone(), 10.into()]));
+    assert_eq!(res.len(), 1);
 
     println!("{}", g.graphviz().unwrap());
 }
