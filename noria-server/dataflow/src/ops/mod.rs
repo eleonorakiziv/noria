@@ -14,6 +14,7 @@ pub mod rewrite;
 pub mod topk;
 pub mod trigger;
 pub mod union;
+use ops::union::Emit;
 
 #[derive(Clone, Serialize, Deserialize)]
 #[allow(clippy::large_enum_variant)]
@@ -221,6 +222,9 @@ impl Ingredient for NodeOperator {
     }
     fn requires_full_materialization(&self) -> bool {
         impl_ingredient_fn_ref!(self, requires_full_materialization,)
+    }
+    fn get_metadata(&self) -> Emit {
+        impl_ingredient_fn_ref!(self, get_metadata, )
     }
 }
 

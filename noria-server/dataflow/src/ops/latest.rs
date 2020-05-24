@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use prelude::*;
+use ops::union::Emit;
 
 /// Latest provides an operator that will maintain the last record for every group.
 ///
@@ -142,6 +143,9 @@ impl Ingredient for Latest {
 
     fn parent_columns(&self, column: usize) -> Vec<(NodeIndex, Option<usize>)> {
         vec![(self.src.as_global(), Some(column))]
+    }
+    fn get_metadata(&self) -> Emit {
+        unimplemented!();
     }
 }
 

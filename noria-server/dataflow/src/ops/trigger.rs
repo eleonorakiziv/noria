@@ -1,5 +1,6 @@
 use prelude::*;
 use std::collections::HashMap;
+use ops::union::Emit;
 
 /// A Trigger data-flow operator.
 ///
@@ -149,6 +150,10 @@ impl Ingredient for Trigger {
     // 2) so we don't have to order group and user universe migrations.
     fn requires_full_materialization(&self) -> bool {
         true
+    }
+
+    fn get_metadata(&self) -> Emit {
+        unimplemented!();
     }
 }
 

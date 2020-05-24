@@ -430,18 +430,28 @@ impl<'a> Plan<'a> {
                     InitialState::IndexedLocal(indices)
                 }
             });
+        // Do not sent the second time
+        let mut reader_exists = false;
+        self.graph[self.node].with_reader(|r| {
+            if r.writer().is_some() {
+                reader_exists = true;
+            }
+        });
+        if !reader_exists {
+            println!("Sending PREPARESTATE to {:?}", self.graph[self.node].local_addr().clone());
+            self.domains
+                .get_mut(&self.graph[self.node].domain())
+                .unwrap()
+                .send_to_healthy(
+                    box Packet::PrepareState {
+                        node: self.graph[self.node].local_addr(),
+                        state: s,
+                    },
+                    self.workers,
+                )
+                .unwrap();
+        }
 
-        self.domains
-            .get_mut(&self.graph[self.node].domain())
-            .unwrap()
-            .send_to_healthy(
-                box Packet::PrepareState {
-                    node: self.graph[self.node].local_addr(),
-                    state: s,
-                },
-                self.workers,
-            )
-            .unwrap();
 
         if !self.partial {
             // we know that this must be a *new* fully materialized node:

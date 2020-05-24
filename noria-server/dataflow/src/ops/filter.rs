@@ -5,6 +5,8 @@ use std::sync;
 
 pub use nom_sql::Operator;
 use prelude::*;
+use ops::union::Emit;
+
 
 /// Filters incoming records according to some filter.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -227,6 +229,10 @@ impl Ingredient for Filter {
 
     fn is_selective(&self) -> bool {
         true
+    }
+
+    fn get_metadata(&self) -> Emit {
+        unimplemented!();
     }
 }
 

@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 
 use prelude::*;
+use ops::union::Emit;
 
 /// This will get distinct records from a set of records compared over a given set of columns
 #[derive(Clone, Serialize, Deserialize)]
@@ -159,6 +160,9 @@ impl Ingredient for Distinct {
 
     fn suggest_indexes(&self, this: NodeIndex) -> HashMap<NodeIndex, Vec<usize>> {
         vec![(this, self.group_by.clone())].into_iter().collect()
+    }
+    fn get_metadata(&self) -> Emit {
+        unimplemented!();
     }
 }
 

@@ -748,26 +748,29 @@ impl Domain {
                 println!("consumed {:?}", consumed);
                 match consumed {
                     // workaround #16223
-                    Packet::AddNode { mut node, parents, children } => {
+                    Packet::AddNode { node, parents, union_children } => {
                         let addr = (&node).local_addr();
                         self.not_ready.insert(addr);
 
+                        // add a child node
                         for p in parents {
                             self.nodes
                                 .get_mut(p)
                                 .unwrap()
                                 .borrow_mut()
-                                .add_child((&node).local_addr());
-                        }
-                        for c in children {
-                            &node.add_child(c);
-                            // self.nodes
-                            //     .get_mut(c)
-                            //     .unwrap()
-                            //     .borrow_mut()
-                            //     .add_ancestor(&node);
+                                .add_child(node.local_addr());
                         }
                         self.nodes.insert(addr, cell::RefCell::new(node));
+
+                        for (c, meta) in union_children.iter() {
+                            // add child to parent
+                            self.nodes.get_mut(addr).unwrap().borrow_mut().add_child(*c);
+                            // add parent to child
+                            self.nodes.get_mut(*c).unwrap().borrow_mut().add_parent(addr);
+                            // update the child's metadata
+                            self.nodes.get_mut(*c).unwrap().borrow_mut().set_metadata(meta.clone());
+                        }
+
                         debug!(self.log, "new node incorporated"; "local" => addr.id());
                     }
                     Packet::RemoveNodes { nodes } => {
@@ -949,12 +952,12 @@ impl Domain {
 
                                 let mut n = self.nodes[node].borrow_mut();
                                 n.with_reader_mut(|r| {
-                                    // assert!(self
-                                    //     .readers
-                                    //     .lock()
-                                    //     .unwrap()
-                                    //     .insert((gid, *self.shard.as_ref().unwrap_or(&0)), r_part)
-                                    //     .is_none());
+                                    assert!(self
+                                        .readers
+                                        .lock()
+                                        .unwrap()
+                                        .insert((gid, *self.shard.as_ref().unwrap_or(&0)), r_part)
+                                        .is_none());
 
                                     // make sure Reader is actually prepared to receive state
                                     r.set_write_handle(w_part)

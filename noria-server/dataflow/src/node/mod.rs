@@ -13,10 +13,10 @@ pub mod special;
 pub use self::special::StreamUpdate;
 
 mod ntype;
-pub use self::ntype::NodeType;
-use ops::NodeOperator::Union; // crate viz for tests
+pub use self::ntype::NodeType;// crate viz for tests
 
 mod debug;
+use ops::union::Emit; // for union
 
 // NOTE(jfrg): the migration code should probably move into the dataflow crate...
 // it is the reason why so much stuff here is pub
@@ -186,6 +186,22 @@ impl Node {
             unreachable!("only union nodes could update unassigned");
         }
     }
+
+    pub fn set_metadata(&mut self, emit: Emit) {
+        if let NodeType::Internal(NodeOperator::Union(ref mut u)) = self.inner {
+            u.set_metadata(emit);
+        } else {
+            unreachable!("only union nodes could update metadata");
+        }
+    }
+
+    pub fn get_metadata(&self) -> Emit {
+        if let NodeType::Internal(NodeOperator::Union(ref u)) = self.inner {
+            u.get_metadata()
+        } else {
+            unreachable!("only union nodes could get metadata");
+        }
+    }
 }
 
 // publicly accessible attributes
@@ -343,6 +359,10 @@ impl Node {
 
     crate fn add_child(&mut self, child: LocalNodeIndex) {
         self.children.push(child);
+    }
+
+    crate fn add_parent(&mut self, parent: LocalNodeIndex) {
+        self.parents.push(parent);
     }
 
     crate fn try_remove_child(&mut self, child: LocalNodeIndex) -> bool {

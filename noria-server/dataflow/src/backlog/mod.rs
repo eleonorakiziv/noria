@@ -100,7 +100,7 @@ fn key_to_double(k: Key) -> Cow<(DataType, DataType)> {
     }
 }
 
-crate struct WriteHandle {
+pub struct WriteHandle {
     handle: multiw::Handle,
     partial: bool,
     cols: usize,

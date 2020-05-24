@@ -3,12 +3,10 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use prelude::*;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-enum Emit {
+pub enum Emit {
     AllFrom(IndexPair, Sharding),
     Project {
         emit: HashMap<IndexPair, Vec<usize>>,
-
-        // generated
         emit_l: BTreeMap<LocalNodeIndex, Vec<usize>>,
         cols: HashMap<IndexPair, usize>,
         cols_l: BTreeMap<LocalNodeIndex, usize>,
@@ -126,6 +124,7 @@ impl Union {
 }
 
 impl Ingredient for Union {
+    // consider updating columns as well
     fn add_parent_to_union(&mut self, fields: HashMap<NodeIndex, Vec<usize>>) {
         self.required += 1;
         let new_emit: HashMap<IndexPair, Vec<usize>> = fields.into_iter().map(|(k, v)| (k.into(), v)).collect();
@@ -149,18 +148,34 @@ impl Ingredient for Union {
     fn update_unassigned(&mut self, ip: IndexPair) {
         match self.emit {
             Emit::AllFrom(..) => println!("Emit all from"),
-            Emit::Project { ref mut emit_l, ..} => {
+            Emit::Project { ref mut emit, ref mut emit_l, ref mut cols, ref mut cols_l} => {
                 if ip.has_local() {
-                    println!("Inserting index pair {:?}", ip);
                     let ni = ip.as_global();
                     if self.unassigned.contains_key(&ni) {
-                        let cols = self.unassigned.get(&ni).unwrap();
-                        emit_l.insert(*ip, cols.clone());
+                        let columns = self.unassigned.get(&ni).unwrap();
+                        emit_l.insert(*ip, columns.clone());
+
+                        // update emit
+                        let curr_pair= ni.into();
+                        emit.remove(&curr_pair);
+                        emit.insert(ip, columns.clone());
+
+                        // update cols and cols_l
+                        cols.insert(ip, columns.len());
+                        cols_l.insert(*ip, columns.len());
                     }
                 }
                 println!("Update unassigned end {:?}", emit_l);
             }
         }
+    }
+
+    fn set_metadata(&mut self, emit: Emit) {
+        self.emit = emit;
+    }
+
+    fn get_metadata(&self) -> Emit {
+        self.emit.clone()
     }
 
     fn take(&mut self) -> NodeOperator {
@@ -234,8 +249,6 @@ impl Ingredient for Union {
         _: &DomainNodes,
         _: &StateMap,
     ) -> ProcessingResult {
-        println!("anc {:?}", self.ancestors().clone());
-        println!("info {:?}", self.clone());
         match self.emit {
             Emit::AllFrom(..) => ProcessingResult {
                 results: rs,
@@ -246,14 +259,9 @@ impl Ingredient for Union {
                     .into_iter()
                     .map(move |rec| {
                         let (r, pos) = rec.extract();
-
                         // yield selected columns for this source
                         // TODO: if emitting all in same order then avoid clone
-                        println!("r: {:?}, pos: {:?}", r, pos);
-                        println!("from: {:?}", from);
-                        println!("EMITL: {:?}", emit_l);
                         let res = emit_l[&from].iter().map(|&col| r[col].clone()).collect();
-
                         // return new row with appropriate sign
                         if pos {
                             Record::Positive(res)
@@ -807,3 +815,4 @@ mod tests {
             .any(|&(n, c)| n == r.as_global() && c == 2));
     }
 }
+

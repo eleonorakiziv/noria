@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use prelude::*;
+use ops::union::Emit;
 
 /// Applies the identity operation to the view. Since the identity does nothing,
 /// it is the simplest possible operation. Primary intended as a reference
@@ -62,6 +63,11 @@ impl Ingredient for Identity {
     fn parent_columns(&self, column: usize) -> Vec<(NodeIndex, Option<usize>)> {
         vec![(self.src.as_global(), Some(column))]
     }
+
+    fn get_metadata(&self) -> Emit {
+        unimplemented!();
+    }
+
 }
 
 #[cfg(test)]

@@ -29,7 +29,7 @@ impl From<Vec<DataType>> for StreamUpdate {
 #[derive(Serialize, Deserialize)]
 pub struct Reader {
     #[serde(skip)]
-    writer: Option<backlog::WriteHandle>,
+    pub writer: Option<backlog::WriteHandle>,
 
     #[serde(skip)]
     streamers: Vec<channel::StreamSender<Vec<StreamUpdate>>>,
@@ -67,7 +67,7 @@ impl Reader {
     }
 
     #[allow(dead_code)]
-    fn writer(&self) -> Option<&backlog::WriteHandle> {
+    pub fn writer(&self) -> Option<&backlog::WriteHandle> {
         self.writer.as_ref()
     }
 

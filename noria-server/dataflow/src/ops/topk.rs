@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use prelude::*;
 
 use nom_sql::OrderType;
+use ops::union::Emit;
 
 #[derive(Clone, Serialize, Deserialize)]
 struct Order(Vec<(usize, OrderType)>);
@@ -324,6 +325,9 @@ impl Ingredient for TopK {
 
     fn parent_columns(&self, col: usize) -> Vec<(NodeIndex, Option<usize>)> {
         vec![(self.src.as_global(), Some(col))]
+    }
+    fn get_metadata(&self) -> Emit {
+        unimplemented!();
     }
 }
 

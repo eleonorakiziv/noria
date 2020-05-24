@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 
 use ops;
 use prelude::*;
+use ops::union::Emit;
 
 // TODO: make a Key type that is an ArrayVec<DataType>
 
@@ -288,4 +289,8 @@ where
     fn add_parent_to_union(&mut self, _fields: HashMap<NodeIndex, Vec<usize>>) {}
 
     fn update_unassigned(&mut self, _ip: IndexPair) {}
+
+    fn set_metadata(&mut self, _emit: Emit) {}
+
+    fn get_metadata(&self) -> Emit;
 }

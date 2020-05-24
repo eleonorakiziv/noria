@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use std::mem;
 
 use prelude::*;
+use ops::union::Emit;
 
 /// Kind of join
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -605,6 +606,9 @@ impl Ingredient for Join {
                 Some(pcol.1),
             )]
         }
+    }
+    fn get_metadata(&self) -> Emit {
+        unimplemented!();
     }
 }
 

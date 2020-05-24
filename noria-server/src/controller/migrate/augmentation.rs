@@ -52,20 +52,24 @@ pub(super) fn inform(
                 .filter(|n| n.domain() == domain)
                 .map(|n| n.local_addr())
                 .collect();
-            let old_children = graph
+
+            // collect new metadata for children
+            let metadata: HashMap<_, _> = graph
                 .neighbors_directed(ni, petgraph::EdgeDirection::Outgoing)
                 .filter(|ni| old_nodes.contains(ni))
                 .map(|ni| &graph[ni])
                 .filter(|n| n.domain() == domain)
-                .map(|n| n.local_addr())
+                .filter(|node| node.is_union())
+                .map(|u| (u.local_addr(), u.get_metadata().clone()))
                 .collect();
-            println!("INFORM. node: {:?}, parents :{:?}", node, old_parents);
+
+            println!("INFORM node: {:?}, parents: {:?}, metadata: {:?}", node, old_parents, metadata);
             debug!(log, "request addition of node"; "node" => ni.index());
             ctx.send_to_healthy(
                 box Packet::AddNode {
                     node,
                     parents: old_parents,
-                    children: old_children,
+                    union_children: metadata,
                 },
                 &controller.workers,
             )

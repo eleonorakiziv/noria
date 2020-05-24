@@ -14,6 +14,8 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::net::SocketAddr;
 use std::time;
+use ops::union::Emit;
+
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ReplayPathSegment {
@@ -130,7 +132,7 @@ pub enum Packet {
     AddNode { //6
         node: Node,
         parents: Vec<LocalNodeIndex>,
-        children: Vec<LocalNodeIndex>,
+        union_children: HashMap<LocalNodeIndex, Emit>,
     },
 
     /// Direct domain to remove some nodes.
@@ -383,8 +385,8 @@ impl fmt::Debug for Packet {
             Packet::RequestPartialReplay { ref tag, .. } => {
                 write!(f, "Packet::RequestPartialReplay({:?})", tag)
             },
-            Packet::AddNode {ref node, ref parents, ref children} => {
-                write!(f, "Packet::AddNode({:?})(parents:{:?}) children {:?}", node, parents, children)
+            Packet::AddNode {ref node, ref parents, ref union_children } => {
+                write!(f, "Packet::AddNode({:?})(parents:{:?}) children {:?}", node, parents, union_children)
             },
             Packet::Ready {ref node, ref purge, ref index} => {
                 write!(f, "Packet::Ready node {:?}, purge: {:?}, index {:?}", node, purge, index)

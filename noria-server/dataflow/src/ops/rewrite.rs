@@ -1,5 +1,6 @@
 use prelude::*;
 use std::collections::{HashMap, HashSet};
+use ops::union::Emit;
 
 /// A Rewrite data-flow operator.
 /// This node rewrites a column from a subset of records to a pre-determined value.
@@ -205,6 +206,9 @@ impl Ingredient for Rewrite {
 
     fn parent_columns(&self, column: usize) -> Vec<(NodeIndex, Option<usize>)> {
         vec![(self.src.as_global(), Some(column))]
+    }
+    fn get_metadata(&self) -> Emit {
+        unimplemented!();
     }
 }
 

@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::fmt;
 
 use prelude::*;
+use ops::union::Emit;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ProjectExpressionBase {
@@ -304,6 +305,9 @@ impl Ingredient for Project {
             Some(self.resolve_col(column))
         };
         vec![(self.src.as_global(), result)]
+    }
+    fn get_metadata(&self) -> Emit {
+        unimplemented!();
     }
 }
 

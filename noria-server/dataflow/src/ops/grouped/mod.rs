@@ -9,6 +9,8 @@ use prelude::*;
 pub mod aggregate;
 pub mod concat;
 pub mod extremum;
+use ops::union::Emit;
+
 
 /// Trait for implementing operations that collapse a group of records into a single record.
 ///
@@ -311,5 +313,8 @@ where
 
     fn is_selective(&self) -> bool {
         true
+    }
+    fn get_metadata(&self) -> Emit {
+        unimplemented!();
     }
 }

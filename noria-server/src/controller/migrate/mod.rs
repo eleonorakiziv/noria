@@ -137,14 +137,10 @@ impl<'a> Migration<'a> {
     pub fn add_parent(&mut self, parent: NodeIndex, child:NodeIndex, fields: Vec<usize>) -> NodeIndex
     {
         let child_ingredient = &mut self.mainline.ingredients[child];
-        let mut parents = child_ingredient.ancestors();
-        assert!(!parents.is_empty());
-        parents.push(parent);
-        // <NodeIndex, Vec<usize>>
 
         let mut hm = HashMap::new();
         hm.insert(parent, fields);
-        println!("NEW PARENT Hash map {:?}",hm);
+        println!("NEW PARENT");
 
         child_ingredient.add_parent_to_union(hm);
 
