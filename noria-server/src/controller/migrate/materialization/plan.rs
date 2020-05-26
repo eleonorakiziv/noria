@@ -431,13 +431,16 @@ impl<'a> Plan<'a> {
                 }
             });
         // Do not sent the second time
-        let mut reader_exists = false;
-        self.graph[self.node].with_reader(|r| {
-            if r.writer().is_some() {
-                reader_exists = true;
-            }
-        });
-        if !reader_exists {
+
+        let need_to_send = if self.m.initialized_readers.contains(&self.node) {
+            false
+        } else {
+            self.m.initialized_readers.insert(self.node);
+            true
+        };
+
+
+        if need_to_send {
             println!("Sending PREPARESTATE to {:?}", self.graph[self.node].local_addr().clone());
             self.domains
                 .get_mut(&self.graph[self.node].domain())

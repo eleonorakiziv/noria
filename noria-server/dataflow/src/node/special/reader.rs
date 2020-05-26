@@ -29,7 +29,7 @@ impl From<Vec<DataType>> for StreamUpdate {
 #[derive(Serialize, Deserialize)]
 pub struct Reader {
     #[serde(skip)]
-    pub writer: Option<backlog::WriteHandle>,
+    writer: Option<backlog::WriteHandle>,
 
     #[serde(skip)]
     streamers: Vec<channel::StreamSender<Vec<StreamUpdate>>>,
@@ -105,7 +105,7 @@ impl Reader {
     }
 
     crate fn set_write_handle(&mut self, wh: backlog::WriteHandle) {
-       // assert!(self.writer.is_none());
+        assert!(self.writer.is_none());
         self.writer = Some(wh);
     }
 
