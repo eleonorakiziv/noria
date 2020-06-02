@@ -57,6 +57,8 @@ pub struct Migration<'a> {
 
     /// Additional migration information provided by the client
     pub(super) context: HashMap<String, DataType>,
+
+    pub(super) union_nodes: HashSet<NodeIndex>,
 }
 
 impl<'a> Migration<'a> {
@@ -141,17 +143,12 @@ impl<'a> Migration<'a> {
         let mut hm = HashMap::new();
         hm.insert(parent, fields);
         println!("NEW PARENT");
-
         child_ingredient.add_parent_to_union(hm);
 
-        // keep track of the fact that child is new
-        self.added.insert(parent);
-
         // insert it into the graph
+        println!("Adding edge between parent {:?} and child {:?}", parent, child);
         self.mainline.ingredients.add_edge(parent, child, ());
-
-
-        // and tell the caller its id
+        self.union_nodes.insert(child);
         child
     }
 
@@ -335,6 +332,8 @@ impl<'a> Migration<'a> {
             &mut mainline.ndomains,
         );
 
+        new.extend(&self.union_nodes);
+        topo = mainline.topo_order(&new);
         // Set up ingress and egress nodes
         let swapped1 = routing::add(
             &log,
@@ -343,6 +342,9 @@ impl<'a> Migration<'a> {
             &mut new,
             &topo,
         );
+        for node in self.union_nodes {
+            new.remove(&node);
+        }
         topo = mainline.topo_order(&new);
 
         // Merge the swap lists
@@ -447,11 +449,25 @@ impl<'a> Migration<'a> {
                     .map(|ci| ci) // I do not think I will need this!
                     .collect();
 
+                // find the parent node
+                let mut node = &mainline.ingredients[ni];
+                let mut pi = ni.clone();
+                if node.is_ingress() || node.is_egress() {
+                    let mut stack = Vec::new();
+                    stack.push(ni);
+                    while (node.is_ingress() || node.is_egress()) && !stack.is_empty() {
+                        pi = stack.pop().unwrap();
+                        node = &mainline.ingredients[pi];
+                        &mainline.ingredients
+                            .neighbors_directed(pi, petgraph::EdgeDirection::Incoming)
+                            .for_each(|ni| stack.push(ni));
+                    }
+                }
+
                 union_children
                     .into_iter()
                     .for_each(|ci| {
-                        println!("Child is {:?}", ci);
-                        mainline.ingredients[ci].update_unassigned(ip)
+                        mainline.ingredients[ci].update_unassigned(ip, pi)
                     });
 
             }

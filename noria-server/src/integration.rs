@@ -2584,3 +2584,46 @@ fn add_parent() {
 
     println!("{}", g.graphviz().unwrap());
 }
+
+#[test]
+fn add_non_base_parent() {
+    let mut g = start_simple("add_parent");
+    let (_, _, c, d) = g.migrate(|mig| {
+        let a = mig.add_base("a", &["a", "b"], Base::default());
+        let b = mig.add_base("b", &["a", "b"], Base::default());
+        let d = mig.add_base("d", &["a", "b"], Base::default());
+
+        let mut emits = HashMap::new();
+        emits.insert(a, vec![0, 1]);
+        emits.insert(b, vec![0, 1]);
+        let u = Union::new(emits);
+        let c = mig.add_ingredient("c", &["a", "b"], u);
+        mig.maintain_anonymous(c, &[0]);
+        (a, b, c, d)
+    });
+    println!("{}", g.graphviz().unwrap());
+
+    let _= g.migrate(move |mig| {
+        let e = mig.add_ingredient("e", &["a", "b"], Identity::new(d));
+        mig.add_parent(e, c, vec![0, 1])
+    });
+
+    let id: DataType = 1.into();
+
+    let mut muta = g.table("a").unwrap().into_sync();
+    let mut mutb = g.table("b").unwrap().into_sync();
+    let mut mutd = g.table("d").unwrap().into_sync();
+    let mut cq = g.view("c").unwrap().into_sync();
+
+    mutd.insert(vec![id.clone(), 10.into()]).unwrap();
+    muta.insert(vec![id.clone(), 3.into()]).unwrap();
+    mutb.insert(vec![id.clone(), 4.into()]).unwrap();
+
+    let res = cq.lookup(&[id.clone()], true).unwrap();
+    assert!(res.iter().any(|r| r == &vec![id.clone(), 10.into()]));
+    assert!(res.iter().any(|r| r == &vec![id.clone(), 3.into()]));
+    assert!(res.iter().any(|r| r == &vec![id.clone(), 4.into()]));
+
+    assert_eq!(res.len(), 3);
+
+}

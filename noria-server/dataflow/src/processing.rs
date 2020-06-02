@@ -288,7 +288,7 @@ where
 
     fn add_parent_to_union(&mut self, _fields: HashMap<NodeIndex, Vec<usize>>) {}
 
-    fn update_unassigned(&mut self, _ip: IndexPair) {}
+    fn update_unassigned(&mut self, _ip: IndexPair, _pi: NodeIndex) {}
 
     fn set_metadata(&mut self, _emit: Emit) {}
 

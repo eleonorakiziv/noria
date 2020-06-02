@@ -453,7 +453,11 @@ impl<'a> Plan<'a> {
                     self.workers,
                 )
                 .unwrap();
+        } else {
+            // Ensures we don't send StartReplay in materialization/mod.rs
+            return Vec::new()
         }
+
 
 
         if !self.partial {

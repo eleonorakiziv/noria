@@ -932,31 +932,31 @@ impl Materializations {
             assert!(!self.partial.contains(&ni));
 
             //setup new replay paths
-            // if !self.to_add.is_empty() {
-            //     let mut materialized = Vec::new();
-            //     for (ni, _ind) in &self.to_add {
-            //         let curr = &graph[*ni];
-            //         match self.get_status(*ni, curr) {
-            //             MaterializationStatus::Not => {
-            //                 graph
-            //                     .neighbors_directed(*ni, petgraph::EdgeDirection::Outgoing)
-            //                     .map(|n| &graph[n])
-            //                     .filter(|node| node.is_reader() && !node.is_base())
-            //                     .map(|r| r.global_addr())
-            //                     .for_each(|index| materialized.push(index))
-            //             },
-            //             _ => {
-            //                 materialized.push(*ni)
-            //             }
-            //         }
-            //     }
-            //     for node in materialized {
-            //         println!("Setup new paths for {:?}", node);
-            //         let mut index_on = HashSet::new();
-            //         self.setup(node, &mut index_on, graph, domains, workers, replies); // mutable reference
-            //     }
-            //     self.to_add.clear();
-            // }
+            if !self.to_add.is_empty() {
+                let mut materialized = Vec::new();
+                for (ni, _ind) in &self.to_add {
+                    let curr = &graph[*ni];
+                    match self.get_status(*ni, curr) {
+                        MaterializationStatus::Not => {
+                            graph
+                                .neighbors_directed(*ni, petgraph::EdgeDirection::Outgoing)
+                                .map(|n| &graph[n])
+                                .filter(|node| node.is_reader() && !node.is_base())
+                                .map(|r| r.global_addr())
+                                .for_each(|index| materialized.push(index))
+                        },
+                        _ => {
+                            materialized.push(*ni)
+                        }
+                    }
+                }
+                for node in materialized {
+                    println!("Setup new paths for {:?}", node);
+                    let mut index_on = HashSet::new();
+                    self.setup(node, &mut index_on, graph, domains, workers, replies); // mutable reference
+                }
+                self.to_add.clear();
+            }
             return;
         }
 

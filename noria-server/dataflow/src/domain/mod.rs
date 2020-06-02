@@ -761,12 +761,12 @@ impl Domain {
                                 .add_child(addr);
                         }
                         self.nodes.insert(addr, cell::RefCell::new(node));
+
                         for (c, meta) in union_children.iter() {
-                            // we don't need to add child to parent, since the node has been "finalized" already
-                            // add parent to child
-                            self.nodes.get_mut(*c).unwrap().borrow_mut().add_parent(addr);
+                            let mut child = self.nodes.get_mut(*c).unwrap().borrow_mut();
+                            child.add_parent(addr);
                             // update the child's metadata
-                            self.nodes.get_mut(*c).unwrap().borrow_mut().set_metadata(meta.clone());
+                            child.set_metadata(meta.clone());
                         }
                         debug!(self.log, "new node incorporated"; "local" => addr.id());
                     }

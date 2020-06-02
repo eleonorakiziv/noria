@@ -145,18 +145,17 @@ impl Ingredient for Union {
         println!("End of add_parent_to_union {:?}", self.unassigned);
     }
 
-    fn update_unassigned(&mut self, ip: IndexPair) {
+    fn update_unassigned(&mut self, ip: IndexPair, pi: NodeIndex) {
         match self.emit {
             Emit::AllFrom(..) => println!("Emit all from"),
             Emit::Project { ref mut emit, ref mut emit_l, ref mut cols, ref mut cols_l} => {
                 if ip.has_local() {
-                    let ni = ip.as_global();
-                    if self.unassigned.contains_key(&ni) {
-                        let columns = self.unassigned.get(&ni).unwrap();
+                    if self.unassigned.contains_key(&pi) {
+                        let columns = self.unassigned.get(&pi).unwrap();
                         emit_l.insert(*ip, columns.clone());
 
                         // update emit
-                        let curr_pair= ni.into();
+                        let curr_pair = pi.into();
                         emit.remove(&curr_pair);
                         emit.insert(ip, columns.clone());
 

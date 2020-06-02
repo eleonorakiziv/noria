@@ -178,10 +178,10 @@ impl Node {
         }
     }
 
-    pub fn update_unassigned(&mut self, ip: IndexPair)
+    pub fn update_unassigned(&mut self, ip: IndexPair, pi: NodeIndex)
     {
         if let NodeType::Internal(NodeOperator::Union(ref mut u)) = self.inner {
-            u.update_unassigned(ip);
+            u.update_unassigned(ip, pi);
         } else {
             unreachable!("only union nodes could update unassigned");
         }
