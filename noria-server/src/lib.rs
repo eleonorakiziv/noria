@@ -370,10 +370,16 @@ extern crate serde_derive;
 #[macro_use]
 extern crate slog;
 
-mod builder;
+// #[macro_use]
+// extern crate nom_sql;
+
+
+#[doc(hidden)]
+pub mod builder;
 mod controller;
 mod coordination;
-mod handle;
+#[doc(hidden)]
+pub mod handle;
 mod startup;
 mod worker;
 
@@ -396,13 +402,13 @@ pub use dataflow::{DurabilityMode, PersistenceParameters};
 pub use noria::consensus::LocalAuthority;
 pub use noria::*;
 pub use petgraph::graph::NodeIndex;
-pub use noria::data::{DataType};
 
 #[doc(hidden)]
 pub mod manual {
     pub use crate::controller::migrate::Migration;
     pub use dataflow::node::special::Base;
     pub use dataflow::ops;
+    pub use nom_sql::Operator;
 }
 
 use dataflow::DomainConfig;

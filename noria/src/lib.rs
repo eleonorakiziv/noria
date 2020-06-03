@@ -128,7 +128,6 @@ use std::collections::HashMap;
 use tokio_tower::multiplex;
 
 mod controller;
-mod data;
 mod table;
 mod view;
 
@@ -138,6 +137,8 @@ pub mod channel;
 pub mod consensus;
 #[doc(hidden)]
 pub mod internal;
+#[doc(hidden)]
+pub mod data;
 
 pub use crate::consensus::ZookeeperAuthority;
 use crate::internal::*;
@@ -149,6 +150,7 @@ pub mod prelude {
     pub use super::ControllerHandle;
     pub use super::{SyncTable, Table};
     pub use super::{SyncView, View};
+    pub use super::data::{DataType};
 }
 
 /// Noria errors.
