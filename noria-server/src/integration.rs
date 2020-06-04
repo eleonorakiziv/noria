@@ -17,6 +17,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use std::{env, thread};
+use dataflow::ops::filter::{Filter, FilterCondition, Value};
+use nom_sql::Operator;
 
 const DEFAULT_SETTLE_TIME_MS: u64 = 200;
 const DEFAULT_SHARDING: Option<usize> = Some(2);
@@ -2648,4 +2650,30 @@ fn empty_lookup() {
     let mut cq = g.view("c").unwrap().into_sync();
     let mut res = cq.lookup(&[id.clone()], true).unwrap();
     assert_eq!(res.len(), 0)
+}
+
+
+#[test]
+fn lookup_users_by_apikey() {
+    let mut g = start_simple("add_parent");
+    let _ = g.migrate(|mig| {
+        let users = mig.add_base("users", &["email_key", "apikey"], Base::new(vec![]).with_key(vec![1]));
+        let user_filters = Some(&[
+            None,
+            Some(FilterCondition::Comparison(
+                Operator::Equal,
+                Value::Constant(DataType::None),
+            )),
+        ]);
+        let users_by_apikey = mig.add_ingredient("users_by_apikey", &["email_key", "apikey"],
+                                                 Filter::new(users, user_filters.unwrap()));
+        mig.maintain_anonymous(users_by_apikey, &[0]);
+        (users, users_by_apikey)
+    });
+    let mut user_by_apikey = g.view("users_by_apikey").unwrap().into_sync();
+    let mut users = g.table("users").unwrap().into_sync();
+    let id: DataType = "ekiziv".to_string().into();
+    users.insert(vec![id.clone(), 10.into()]).unwrap();
+    let res = user_by_apikey.lookup(&[10.into()], true).unwrap();
+    assert_eq!(res.len(), 1);
 }
