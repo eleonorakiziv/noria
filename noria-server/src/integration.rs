@@ -2625,5 +2625,27 @@ fn add_non_base_parent() {
     assert!(res.iter().any(|r| r == &vec![id.clone(), 4.into()]));
 
     assert_eq!(res.len(), 3);
+}
 
+#[test]
+fn empty_lookup() {
+    let mut g = start_simple("add_parent");
+    let (_, _, c, d) = g.migrate(|mig| {
+        let a = mig.add_base("a", &["a", "b"], Base::default());
+        let b = mig.add_base("b", &["a", "b"], Base::default());
+        let d = mig.add_base("d", &["a", "b"], Base::default());
+
+        let mut emits = HashMap::new();
+        emits.insert(a, vec![0, 1]);
+        emits.insert(b, vec![0, 1]);
+        let u = Union::new(emits);
+        let c = mig.add_ingredient("c", &["a", "b"], u);
+        mig.maintain_anonymous(c, &[0]);
+        (a, b, c, d)
+    });
+    println!("{}", g.graphviz().unwrap());
+    let id: DataType = 1.into();
+    let mut cq = g.view("c").unwrap().into_sync();
+    let mut res = cq.lookup(&[id.clone()], true).unwrap();
+    assert_eq!(res.len(), 0)
 }

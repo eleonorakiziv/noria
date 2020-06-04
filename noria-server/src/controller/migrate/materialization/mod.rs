@@ -872,30 +872,58 @@ impl Materializations {
             // acknowledge the change. this is important so that we don't ready a child in a
             // different domain before the parent has been readied. it's also important to avoid us
             // returning before the graph is actually fully operational.
-            debug!(self.log, "readying node"; "node" => ni.index());
-            let domain = domains.get_mut(&n.domain()).unwrap();
-            domain
-                .send_to_healthy(
-                    box Packet::Ready {
-                        node: n.local_addr(),
-                        purge: n.purge,
-                        index: index_on.clone(),
-                    },
-                    workers,
-                )
-                .unwrap();
-            replies.wait_for_acks(&domain);
-            debug!(self.log, "node ready"; "node" => ni.index());
+            if n.is_base() {
+                debug!(self.log, "readying node"; "node" => ni.index());
+                let domain = domains.get_mut(&n.domain()).unwrap();
+                domain
+                    .send_to_healthy(
+                        box Packet::Ready {
+                            node: n.local_addr(),
+                            purge: n.purge,
+                            index: index_on.clone(),
+                        },
+                        workers,
+                    )
+                    .unwrap();
+                replies.wait_for_acks(&domain);
+                debug!(self.log, "node ready"; "node" => ni.index());
 
-            let start = ::std::time::Instant::now();
-            self.ready_one(ni, &mut index_on, graph, domains, workers, replies);
-            let reconstructed = index_on.is_empty();
+                let start = ::std::time::Instant::now();
+                self.ready_one(ni, &mut index_on, graph, domains, workers, replies);
+                let reconstructed = index_on.is_empty();
 
-            if reconstructed {
-                info!(self.log, "reconstruction completed";
+                if reconstructed {
+                    info!(self.log, "reconstruction completed";
                 "ms" => start.elapsed().as_millis(),
                 "node" => ni.index(),
                 );
+                }
+            } else {
+                let start = ::std::time::Instant::now();
+                self.ready_one(ni, &mut index_on, graph, domains, workers, replies);
+                let reconstructed = index_on.is_empty();
+
+                debug!(self.log, "readying node"; "node" => ni.index());
+                let domain = domains.get_mut(&n.domain()).unwrap();
+                domain
+                    .send_to_healthy(
+                        box Packet::Ready {
+                            node: n.local_addr(),
+                            purge: n.purge,
+                            index: index_on.clone(),
+                        },
+                        workers,
+                    )
+                    .unwrap();
+                replies.wait_for_acks(&domain);
+                debug!(self.log, "node ready"; "node" => ni.index());
+
+                if reconstructed {
+                    info!(self.log, "reconstruction completed";
+                "ms" => start.elapsed().as_millis(),
+                "node" => ni.index(),
+                );
+                }
             }
         }
 
