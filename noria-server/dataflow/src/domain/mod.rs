@@ -1095,7 +1095,7 @@ impl Domain {
                             .expect("migration replay path started with non-materialized node")
                             .cloned_records();
 
-                        debug!(self.log,
+                        info!(self.log,
                                "current state cloned for replay";
                                "μs" => start.elapsed().as_micros()
                         );

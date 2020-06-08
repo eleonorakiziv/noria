@@ -139,9 +139,11 @@ fn main() {
     }
     builder.set_sharding(sharding);
     builder.set_quorum(quorum);
-    if matches.is_present("nopartial") {
-        builder.disable_partial();
-    }
+    builder.disable_partial();
+
+    // if matches.is_present("nopartial") {
+    //     builder.disable_partial();
+    // }
     if matches.is_present("noreuse") {
         builder.set_reuse(ReuseConfigType::NoReuse);
     }
