@@ -98,7 +98,6 @@ impl<'a> Plan<'a> {
 
         // all columns better resolve if we're doing partial
         assert!(!self.partial || paths.iter().all(|p| p[0].1.iter().all(Option::is_some)));
-        println!("PATHS in paths: {:?}", paths);
 
         paths
     }

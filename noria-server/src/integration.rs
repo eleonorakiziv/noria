@@ -2654,26 +2654,27 @@ fn empty_lookup() {
 
 
 #[test]
-fn lookup_users_by_apikey() {
+fn add_union_with_one_parent() {
     let mut g = start_simple("add_parent");
-    let _ = g.migrate(|mig| {
-        let users = mig.add_base("users", &["email_key", "apikey"], Base::new(vec![]).with_key(vec![1]));
-        let user_filters = Some(&[
-            None,
-            Some(FilterCondition::Comparison(
-                Operator::Equal,
-                Value::Constant(DataType::None),
-            )),
-        ]);
-        let users_by_apikey = mig.add_ingredient("users_by_apikey", &["email_key", "apikey"],
-                                                 Filter::new(users, user_filters.unwrap()));
-        mig.maintain_anonymous(users_by_apikey, &[0]);
-        (users, users_by_apikey)
+    let (_, c) = g.migrate(|mig| {
+        let a = mig.add_base("a", &["a", "b"], Base::default());
+
+        let mut emits = HashMap::new();
+        emits.insert(a, vec![0, 1]);
+        let u = Union::new(emits);
+        let c = mig.add_ingredient("c", &["a", "b"], u);
+        mig.maintain_anonymous(c, &[0]);
+        (a, c)
     });
-    let mut user_by_apikey = g.view("users_by_apikey").unwrap().into_sync();
-    let mut users = g.table("users").unwrap().into_sync();
-    let id: DataType = "ekiziv".to_string().into();
-    users.insert(vec![id.clone(), 10.into()]).unwrap();
-    let res = user_by_apikey.lookup(&[10.into()], true).unwrap();
-    assert_eq!(res.len(), 1);
+    let id: DataType = 1.into();
+
+    let _= g.migrate(move |mig| {
+        let b = mig.add_base("b", &["a", "b"], Base::default());
+        mig.add_parent(b, c, vec![0, 1])
+    });
+    println!("{}", g.graphviz().unwrap());
+
+    let mut cq = g.view("c").unwrap().into_sync();
+    let mut res = cq.lookup(&[id.clone()], true).unwrap();
+    assert_eq!(res.len(), 0)
 }

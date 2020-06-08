@@ -963,15 +963,25 @@ impl Materializations {
             if !self.to_add.is_empty() {
                 let mut materialized = Vec::new();
                 for (ni, _ind) in &self.to_add {
-                    let curr = &graph[*ni];
-                    match self.get_status(*ni, curr) {
+                    let mut node = &graph[*ni];
+                    match self.get_status(*ni, node) {
                         MaterializationStatus::Not => {
-                            graph
-                                .neighbors_directed(*ni, petgraph::EdgeDirection::Outgoing)
-                                .map(|n| &graph[n])
-                                .filter(|node| node.is_reader() && !node.is_base())
-                                .map(|r| r.global_addr())
-                                .for_each(|index| materialized.push(index))
+                            // find the set of readers
+                            let mut readers = HashSet::new();
+                            let mut i = ni.clone();
+                            let mut stack = Vec::new();
+                            stack.push(i);
+                            while !stack.is_empty() {
+                                i = stack.pop().unwrap();
+                                node = &graph[i];
+                                if node.is_reader() {
+                                    readers.insert(i);
+                                }
+                                &graph
+                                    .neighbors_directed(i, petgraph::EdgeDirection::Outgoing)
+                                    .for_each(|ni| stack.push(ni));
+                            }
+                            materialized.extend(readers);
                         },
                         _ => {
                             materialized.push(*ni)
