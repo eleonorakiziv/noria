@@ -173,6 +173,10 @@ impl Ingredient for Union {
         self.emit = emit;
     }
 
+    fn increment_required(&mut self) {
+        self.required += 1;
+    }
+
     fn get_metadata(&self) -> Emit {
         self.emit.clone()
     }

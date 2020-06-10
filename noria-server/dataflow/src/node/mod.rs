@@ -195,6 +195,14 @@ impl Node {
         }
     }
 
+    pub fn increment_required(&mut self) {
+        if let NodeType::Internal(NodeOperator::Union(ref mut u)) = self.inner {
+            u.increment_required();
+        } else {
+            unreachable!("only union nodes could update metadata");
+        }
+    }
+
     pub fn get_metadata(&self) -> Emit {
         if let NodeType::Internal(NodeOperator::Union(ref u)) = self.inner {
             u.get_metadata()

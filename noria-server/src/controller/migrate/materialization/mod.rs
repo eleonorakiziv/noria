@@ -18,7 +18,6 @@ use slog::Logger;
 use std::collections::{HashMap, HashSet};
 use std::mem;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use failure::_core::hash::Hash;
 
 mod plan;
 
@@ -59,7 +58,6 @@ pub(in crate::controller) struct Materializations {
 
     tag_generator: AtomicUsize,
 
-    to_add: HashMap<NodeIndex, Indices>,
     paths_ending_at: HashMap<NodeIndex, Vec<Vec<(NodeIndex, Vec<Option<usize>>)>>>, // paths ending at a specific NodeIndex
     initialized_readers: HashSet<NodeIndex>,
 }
@@ -79,7 +77,6 @@ impl Materializations {
 
             tag_generator: AtomicUsize::default(),
 
-            to_add: HashMap::default(),
             paths_ending_at: HashMap::default(),
             initialized_readers: HashSet::default(),
         }
@@ -748,11 +745,6 @@ impl Materializations {
         let mut make = Vec::with_capacity(new.len());
         let mut topo = petgraph::visit::Topo::new(&*graph);
         while let Some(node) = topo.next(&*graph) {
-            let new_parents: Vec<_> = graph
-                .neighbors_directed(node, petgraph::EdgeDirection::Incoming)
-                .filter(|n| new.contains(&n))
-                .collect();
-
             if graph[node].is_source() {
                 continue;
             }
@@ -764,20 +756,6 @@ impl Materializations {
                 make.push(node);
             } else if self.added.contains_key(&node) {
                 reindex.push(node);
-            } else if !new_parents.is_empty() {
-
-                // find the index_on and push it to self.to_add
-                let curr = &graph[node];
-                let num_cols = (&curr).fields().len();
-
-                let indices : Vec<usize> = (0..num_cols)
-                    .into_iter()
-                    .filter_map(|f| curr.resolve(f))
-                    .flatten()
-                    .filter(|(ni, _col)| new.contains(&ni))
-                    .map(|(_ni, col)| col)
-                    .collect();
-                self.to_add.entry(node).or_default().insert(indices);
             }
         }
 
@@ -953,18 +931,30 @@ impl Materializations {
         } else {
             debug!(self.log, "new stateless node: {:?}", n);
         }
+        // if this node doesn't need to be materialized, then we're done.
+        has_state = !index_on.is_empty();
+        n.with_reader(|r| {
+            if r.is_materialized() {
+                has_state = true;
+            }
+        })
+            .unwrap_or(());
 
-        if n.is_base() {
-            // a new base must be empty, so we can materialize it immediately
-            info!(self.log, "no need to replay empty new base"; "node" => ni.index());
+        let union_children: Vec<_> = graph
+            .neighbors_directed(ni, petgraph::EdgeDirection::Outgoing)
+            .filter(|&n| graph[n].is_union())
+            .collect();
+
+
+        if n.is_base() || !has_state {
             assert!(!self.partial.contains(&ni));
 
-            //setup new replay paths
-            if !self.to_add.is_empty() {
+            //setup new replay paths if the children of the current node is union
+            if !union_children.is_empty() {
                 let mut materialized = Vec::new();
-                for (ni, _ind) in &self.to_add {
-                    let mut node = &graph[*ni];
-                    match self.get_status(*ni, node) {
+                for ni in union_children.into_iter() {
+                    let mut node = &graph[ni];
+                    match self.get_status(ni, node) {
                         MaterializationStatus::Not => {
                             // find the set of readers
                             let mut readers = HashSet::new();
@@ -984,7 +974,7 @@ impl Materializations {
                             materialized.extend(readers);
                         },
                         _ => {
-                            materialized.push(*ni)
+                            materialized.push(ni)
                         }
                     }
                 }
@@ -993,22 +983,9 @@ impl Materializations {
                     let mut index_on = HashSet::new();
                     self.setup(node, &mut index_on, graph, domains, workers, replies); // mutable reference
                 }
-                self.to_add.clear();
+            } else {
+                debug!(self.log, "no need to replay non-materialized view"; "node" => ni.index());
             }
-            return;
-        }
-
-        // if this node doesn't need to be materialized, then we're done.
-        has_state = !index_on.is_empty();
-        n.with_reader(|r| {
-            if r.is_materialized() {
-                has_state = true;
-            }
-        })
-        .unwrap_or(());
-
-        if !has_state {
-            debug!(self.log, "no need to replay non-materialized view"; "node" => ni.index());
             return;
         }
 

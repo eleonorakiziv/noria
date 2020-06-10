@@ -293,4 +293,6 @@ where
     fn set_metadata(&mut self, _emit: Emit) {}
 
     fn get_metadata(&self) -> Emit;
+
+    fn increment_required(&mut self) {}
 }

@@ -767,6 +767,7 @@ impl Domain {
                             child.add_parent(addr);
                             // update the child's metadata
                             child.set_metadata(meta.clone());
+                            child.increment_required();
                         }
                         debug!(self.log, "new node incorporated"; "local" => addr.id());
                     }
