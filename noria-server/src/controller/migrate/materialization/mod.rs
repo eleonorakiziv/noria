@@ -60,6 +60,7 @@ pub(in crate::controller) struct Materializations {
 
     paths_ending_at: HashMap<NodeIndex, Vec<Vec<(NodeIndex, Vec<Option<usize>>)>>>, // paths ending at a specific NodeIndex
     initialized_readers: HashSet<NodeIndex>,
+    new_parents: HashSet<NodeIndex>,
 }
 
 impl Materializations {
@@ -79,6 +80,7 @@ impl Materializations {
 
             paths_ending_at: HashMap::default(),
             initialized_readers: HashSet::default(),
+            new_parents: HashSet::default(),
         }
     }
 
@@ -751,11 +753,18 @@ impl Materializations {
             if graph[node].is_dropped() {
                 continue;
             }
-
             if new.contains(&node) {
                 make.push(node);
             } else if self.added.contains_key(&node) {
                 reindex.push(node);
+            }
+            // the parent is added to union, it is not the parents used to create the union. 
+            else if graph[node].is_union() {
+                let parents: HashSet <_> = graph
+                    .neighbors_directed(node, petgraph::EdgeDirection::Incoming)
+                    .filter(|n| new.contains(&n))
+                    .collect();
+                self.new_parents.extend(&parents);
             }
         }
 
@@ -851,7 +860,7 @@ impl Materializations {
             // different domain before the parent has been readied. it's also important to avoid us
             // returning before the graph is actually fully operational.
             if n.is_base() {
-                debug!(self.log, "readying node"; "node" => ni.index());
+                info!(self.log, "readying base node"; "node" => ni.index());
                 let domain = domains.get_mut(&n.domain()).unwrap();
                 domain
                     .send_to_healthy(
@@ -864,7 +873,7 @@ impl Materializations {
                     )
                     .unwrap();
                 replies.wait_for_acks(&domain);
-                debug!(self.log, "node ready"; "node" => ni.index());
+                debug!(self.log, "base node ready"; "node" => ni.index());
 
                 let start = ::std::time::Instant::now();
                 self.ready_one(ni, &mut index_on, graph, domains, workers, replies);
@@ -904,7 +913,6 @@ impl Materializations {
                 }
             }
         }
-
         self.added.clear();
     }
 
@@ -949,43 +957,45 @@ impl Materializations {
         if n.is_base() || !has_state {
             assert!(!self.partial.contains(&ni));
 
-            //setup new replay paths if the children of the current node is union
-            if !union_children.is_empty() {
-                let mut materialized = Vec::new();
-                for ni in union_children.into_iter() {
-                    let mut node = &graph[ni];
-                    match self.get_status(ni, node) {
-                        MaterializationStatus::Not => {
-                            // find the set of readers
-                            let mut readers = HashSet::new();
-                            let mut i = ni.clone();
-                            let mut stack = Vec::new();
-                            stack.push(i);
-                            while !stack.is_empty() {
-                                i = stack.pop().unwrap();
-                                node = &graph[i];
-                                if node.is_reader() {
-                                    readers.insert(i);
+            if self.new_parents.contains(&ni) {
+                if !union_children.is_empty() {
+                    let mut materialized = Vec::new();
+                    for ni in union_children.into_iter() {
+                        let mut node = &graph[ni];
+                        match self.get_status(ni, node) {
+                            MaterializationStatus::Not => {
+                                // find the set of readers
+                                let mut readers = HashSet::new();
+                                let mut i = ni.clone();
+                                let mut stack = Vec::new();
+                                stack.push(i);
+                                while !stack.is_empty() {
+                                    i = stack.pop().unwrap();
+                                    node = &graph[i];
+                                    if node.is_reader() {
+                                        readers.insert(i);
+                                    }
+                                    &graph
+                                        .neighbors_directed(i, petgraph::EdgeDirection::Outgoing)
+                                        .for_each(|ni| stack.push(ni));
                                 }
-                                &graph
-                                    .neighbors_directed(i, petgraph::EdgeDirection::Outgoing)
-                                    .for_each(|ni| stack.push(ni));
+                                materialized.extend(readers);
+                            },
+                            _ => {
+                                materialized.push(ni)
                             }
-                            materialized.extend(readers);
-                        },
-                        _ => {
-                            materialized.push(ni)
                         }
                     }
+                    for node in materialized {
+                        println!("Setup new paths for {:?}", node);
+                        let mut index_on = HashSet::new();
+                        self.setup(node, &mut index_on, graph, domains, workers, replies); // mutable reference
+                    }
+                } else {
+                    debug!(self.log, "no need to replay non-materialized view"; "node" => ni.index());
                 }
-                for node in materialized {
-                    println!("Setup new paths for {:?}", node);
-                    let mut index_on = HashSet::new();
-                    self.setup(node, &mut index_on, graph, domains, workers, replies); // mutable reference
-                }
-            } else {
-                debug!(self.log, "no need to replay non-materialized view"; "node" => ni.index());
             }
+            self.new_parents.clear();
             return;
         }
 
