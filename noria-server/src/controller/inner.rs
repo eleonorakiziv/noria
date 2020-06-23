@@ -315,6 +315,12 @@ impl ControllerInner {
                     self.remove_query(authority, args)
                         .map(|r| json::to_string(&r).unwrap())
                 }),
+            (Method::POST, "/remove_leaf") => json::from_slice(&body)
+                .map_err(|_| StatusCode::BAD_REQUEST)
+                .map(|args| {
+                    self.remove_leaf(args)
+                        .map(|r| json::to_string(&r).unwrap())
+                }),
             _ => Err(StatusCode::NOT_FOUND),
         }
     }
@@ -1202,26 +1208,53 @@ impl ControllerInner {
                 })
                 .collect();
             if has_non_reader_children {
-                // should never happen, since we remove nodes in reverse topological order
                 crit!(
                     self.log,
                     "not removing node {} yet, as it still has non-reader children",
                     leaf.index()
                 );
-                // deleting non-reader and its children
                 for nr in non_readers {
-                    if !self.ingredients[nr].is_base() {
-                        let mut children = Vec::default();
-                        self.ingredients
-                            .neighbors_directed(nr, petgraph::EdgeDirection::Outgoing)
-                            .for_each(|ni| children.push(ni));
-                        for child in children {
-                            self.remove_leaf(child);
+                    if self.ingredients[nr.clone()].is_union() {
+                        // we need to send negative records for each row in the base table.
+                        println!("About to send this new message");
+                        let parent = &mut self.ingredients[leaf.clone()];
+                        match self
+                            .domains
+                            .get_mut(&parent.domain())
+                            .unwrap()
+                            .send_to_healthy(box Packet::Message {
+                                link: Link::new(parent.local_addr(), parent.local_addr()),
+                                data: Default::default(),
+                                tracer: None
+                            }, &self.workers)
+                        {
+                            Ok(_) => {
+                                println!("Everything is great");
+                            },
+                            Err(e) => match e {
+                                SendError::IoError(ref ioe) => {
+                                    if ioe.kind() == io::ErrorKind::BrokenPipe
+                                        && ioe.get_ref().unwrap().description() == "worker failed"
+                                    {
+                                        // message would have gone to a failed worker, so ignore error
+                                    } else {
+                                        panic!("failed to remove nodes: {:?}", e);
+                                    }
+                                }
+                                _ => {
+                                    panic!("failed to remove nodes: {:?}", e);
+                                }
+                            },
                         }
+                        sleep(Duration::from_millis(200));
+                        let union_edge = self.ingredients.find_edge(leaf, nr).unwrap();
+                        println!("Removing the union edge {:?}", union_edge.clone());
+                        self.ingredients.remove_edge(union_edge);
+                        continue;
+                    } else {
                         self.remove_leaf(nr);
                     }
                 }
-                //unreachable;
             }
 
             // nodes can have only one reader attached

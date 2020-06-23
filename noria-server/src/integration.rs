@@ -2666,3 +2666,80 @@ fn add_union_with_one_parent() {
     let res = cq.lookup(&[id.clone()], true).unwrap();
     assert_eq!(res.len(), 0)
 }
+
+#[test]
+fn unsubscribe_simple() {
+    let mut g = start_simple("unsubscribe_simple");
+    let (a, _, c) = g.migrate(|mig| {
+        let a = mig.add_base("a", &["a", "b"], Base::default());
+        let b = mig.add_base("b", &["a", "b"], Base::default());
+
+        let mut emits = HashMap::new();
+        emits.insert(a, vec![0, 1]);
+        emits.insert(b, vec![0, 1]);
+        let u = Union::new(emits);
+        let c = mig.add_ingredient("c", &["a", "b"], u);
+        mig.maintain_anonymous(c, &[0]);
+        (a, b, c)
+    });
+    println!("{}", g.graphviz().unwrap());
+
+    let mut cq = g.view("c").unwrap().into_sync();
+    let id: DataType = 1.into();
+
+    let mut muta = g.table("a").unwrap().into_sync();
+    let mut mutb = g.table("b").unwrap().into_sync();
+
+    muta.insert(vec![id.clone(), 10.into()]).unwrap();
+    mutb.insert(vec![id.clone(), 1.into()]).unwrap();
+    sleep();
+
+    g.remove_leaf(a);
+
+    let mut res = cq.lookup(&[id.clone()], true).unwrap();
+    assert_eq!(res.len(), 1);
+    assert!(res.iter().any(|r| r == &vec![id.clone(), 1.into()]));
+
+    println!("{}", g.graphviz().unwrap());
+}
+
+#[test]
+fn unsubscribe_base_with_view() {
+    let mut g = start_simple("unsubscribe_simple");
+    let (a, _, c) = g.migrate(|mig| {
+        let a = mig.add_base("a", &["a", "b"], Base::default());
+        let v = mig.add_ingredient("v", &["a", "b"], Project::new(a, &[0, 1], None, None));
+        let b = mig.add_base("b", &["a", "b"], Base::default());
+
+        let mut emits = HashMap::new();
+        emits.insert(v, vec![0, 1]);
+        emits.insert(b, vec![0, 1]);
+        let u = Union::new(emits);
+        let c = mig.add_ingredient("c", &["a", "b"], u);
+        mig.maintain_anonymous(c, &[0]);
+        (a, b, c)
+    });
+    println!("{}", g.graphviz().unwrap());
+
+    let mut cq = g.view("c").unwrap().into_sync();
+    let id: DataType = 1.into();
+
+    let mut muta = g.table("a").unwrap().into_sync();
+    let mut mutb = g.table("b").unwrap().into_sync();
+    println!("Inserting");
+    muta.insert(vec![id.clone(), 10.into()]).unwrap();
+    mutb.insert(vec![id.clone(), 1.into()]).unwrap();
+    println!("Done inserting-starting to remove base");
+    sleep();
+
+    g.remove_leaf(a);
+    sleep();
+    println!("{}", g.graphviz().unwrap());
+
+    println!("Looking up");
+    let mut res = cq.lookup(&[id.clone()], true).unwrap();
+    assert_eq!(res.len(), 1);
+    assert!(res.iter().any(|r| r == &vec![id.clone(), 1.into()]));
+
+}
+

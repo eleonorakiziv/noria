@@ -279,6 +279,23 @@ impl Base {
             HashMap::new()
         }
     }
+    pub(in crate::node) fn notify_leave(
+        &mut self,
+        us: LocalNodeIndex,
+        state: &StateMap,
+    ) -> Records {
+        let db = state
+            .get(us)
+            .expect("base with primary key must be materialized");
+        let actual_rows: Vec<Record> = db
+            .cloned_records()
+            .into_iter()
+            .map(|row| Record::Negative(row))
+            .collect();
+
+        println!("actual rows returned {:?}", actual_rows.clone());
+        actual_rows.into()
+    }
 }
 
 #[cfg(test)]
