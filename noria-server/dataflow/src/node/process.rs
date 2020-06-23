@@ -59,6 +59,19 @@ impl Node {
                             tracer,
                         }));
                     }
+                    Some(box Packet::Message {
+                        link, data, tracer,
+                    }) => {
+                        let mut rs = b.notify_leave(addr, &*state);
+                        if keyed_by.is_none() {
+                            materialize(&mut rs, None, state.get_mut(addr));
+                        }
+                        *m = Some(Box::new(Packet::Message {
+                            link,
+                            data: rs,
+                            tracer,
+                        }));
+                    }
                     Some(ref p) => {
                         // TODO: replays?
                         unreachable!("base received non-input packet {:?}", p);

@@ -436,6 +436,40 @@ impl ControllerInner {
         Ok(())
     }
 
+    pub fn send_negative_records(&mut self, ni: NodeIndex) {
+        let parent = &mut self.ingredients[ni.clone()];
+        println!("Sending negative records to all children");
+        match self
+            .domains
+            .get_mut(&parent.domain())
+            .unwrap()
+            .send_to_healthy(box Packet::Message {
+                link: Link::new(parent.local_addr(), parent.local_addr()),
+                data: Default::default(),
+                tracer: None
+            }, &self.workers)
+        {
+            Ok(_) => {
+                println!("Everything is great");
+            },
+            Err(e) => match e {
+                SendError::IoError(ref ioe) => {
+                    if ioe.kind() == io::ErrorKind::BrokenPipe
+                        && ioe.get_ref().unwrap().description() == "worker failed"
+                    {
+                        // message would have gone to a failed worker, so ignore error
+                    } else {
+                        panic!("failed to send negative records: {:?}", e);
+                    }
+                }
+                _ => {
+                    panic!("failed to send negative records nodes: {:?}", e);
+                }
+            },
+        }
+        sleep(Duration::from_millis(200));
+    }
+
     /// Construct `ControllerInner` with a specified listening interface
     pub(super) fn new(
         log: slog::Logger,
@@ -1184,6 +1218,10 @@ impl ControllerInner {
             leaf.index()
         );
 
+        if  self.ingredients[leaf.clone()].is_base() {
+            self.send_negative_records(leaf);
+        }
+
         if self
             .ingredients
             .neighbors_directed(leaf, petgraph::EdgeDirection::Outgoing)
@@ -1215,41 +1253,10 @@ impl ControllerInner {
                 );
                 for nr in non_readers {
                     if self.ingredients[nr.clone()].is_union() {
-                        // we need to send negative records for each row in the base table.
-                        println!("About to send this new message");
-                        let parent = &mut self.ingredients[leaf.clone()];
-                        match self
-                            .domains
-                            .get_mut(&parent.domain())
-                            .unwrap()
-                            .send_to_healthy(box Packet::Message {
-                                link: Link::new(parent.local_addr(), parent.local_addr()),
-                                data: Default::default(),
-                                tracer: None
-                            }, &self.workers)
-                        {
-                            Ok(_) => {
-                                println!("Everything is great");
-                            },
-                            Err(e) => match e {
-                                SendError::IoError(ref ioe) => {
-                                    if ioe.kind() == io::ErrorKind::BrokenPipe
-                                        && ioe.get_ref().unwrap().description() == "worker failed"
-                                    {
-                                        // message would have gone to a failed worker, so ignore error
-                                    } else {
-                                        panic!("failed to remove nodes: {:?}", e);
-                                    }
-                                }
-                                _ => {
-                                    panic!("failed to remove nodes: {:?}", e);
-                                }
-                            },
-                        }
-                        sleep(Duration::from_millis(200));
                         let union_edge = self.ingredients.find_edge(leaf, nr).unwrap();
                         println!("Removing the union edge {:?}", union_edge.clone());
                         self.ingredients.remove_edge(union_edge);
+                        // remove the union and all the subsequent nodes if union does not have parents anymore
                         continue;
                     } else {
                         self.remove_leaf(nr);
