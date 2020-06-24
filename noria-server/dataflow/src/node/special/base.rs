@@ -145,6 +145,8 @@ impl Base {
                     if let TableOperation::Insert(mut r) = r {
                         self.fix(&mut r);
                         Record::Positive(r)
+                    } else if let TableOperation::Delete { key} = r {
+                        Record::Negative(key)
                     } else {
                         unreachable!("unkeyed base got non-insert operation {:?}", r);
                     }

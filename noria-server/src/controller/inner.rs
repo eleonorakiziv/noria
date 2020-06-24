@@ -315,10 +315,10 @@ impl ControllerInner {
                     self.remove_query(authority, args)
                         .map(|r| json::to_string(&r).unwrap())
                 }),
-            (Method::POST, "/remove_leaf") => json::from_slice(&body)
+            (Method::POST, "/remove_base") => json::from_slice(&body)
                 .map_err(|_| StatusCode::BAD_REQUEST)
                 .map(|args| {
-                    self.remove_leaf(args)
+                    self.remove_base(args)
                         .map(|r| json::to_string(&r).unwrap())
                 }),
             _ => Err(StatusCode::NOT_FOUND),
@@ -1207,6 +1207,13 @@ impl ControllerInner {
         graphviz(&self.ingredients, detailed, &self.materializations)
     }
 
+    fn remove_base(&mut self, mut node: NodeIndex) -> Result<(), String> {
+        assert!(self.ingredients[node].is_base());
+        self.send_negative_records(node);
+        self.ingredients[node].remove();
+        Ok(())
+    }
+
     fn remove_leaf(&mut self, mut leaf: NodeIndex) -> Result<(), String> {
         let mut removals = vec![];
         let start = leaf;
@@ -1217,10 +1224,6 @@ impl ControllerInner {
             "Computing removals for removing node {}",
             leaf.index()
         );
-
-        if  self.ingredients[leaf.clone()].is_base() {
-            self.send_negative_records(leaf);
-        }
 
         if self
             .ingredients
@@ -1252,13 +1255,14 @@ impl ControllerInner {
                     leaf.index()
                 );
                 for nr in non_readers {
-                    if self.ingredients[nr.clone()].is_union() {
-                        let union_edge = self.ingredients.find_edge(leaf, nr).unwrap();
-                        println!("Removing the union edge {:?}", union_edge.clone());
-                        self.ingredients.remove_edge(union_edge);
-                        // remove the union and all the subsequent nodes if union does not have parents anymore
-                        continue;
-                    } else {
+                    if !self.ingredients[nr].is_base() {
+                        let mut children = Vec::default();
+                        self.ingredients
+                            .neighbors_directed(nr, petgraph::EdgeDirection::Outgoing)
+                            .for_each(|ni| children.push(ni));
+                        for child in children {
+                            self.remove_leaf(child);
+                        }
                         self.remove_leaf(nr);
                     }
                 }

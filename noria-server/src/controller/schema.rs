@@ -125,7 +125,7 @@ fn trace_column_type_on_path(
         let source_node = &graph[*ni];
         let source_column_index = cols[0].unwrap();
 
-        if source_node.is_base() {
+        if source_node.is_base() || source_node.is_dropped() {
             type_for_base_column(
                 recipe,
                 source_node.name(),

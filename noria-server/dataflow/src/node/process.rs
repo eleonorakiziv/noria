@@ -4,6 +4,7 @@ use payload;
 use prelude::*;
 use std::collections::{HashSet, VecDeque};
 use std::mem;
+use noria::TableOperation;
 
 impl Node {
     #[allow(clippy::too_many_arguments)]
@@ -66,6 +67,12 @@ impl Node {
                         if keyed_by.is_none() {
                             materialize(&mut rs, None, state.get_mut(addr));
                         }
+                        let data: Vec<TableOperation> = rs
+                            .into_iter()
+                            .map(|r| TableOperation::Delete {key: r.to_vec()} )
+                            .collect();
+                        rs = b.process(addr, data, &*state);
+
                         *m = Some(Box::new(Packet::Message {
                             link,
                             data: rs,

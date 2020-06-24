@@ -36,6 +36,15 @@ pub fn start_simple(prefix: &str) -> SyncHandle<LocalAuthority> {
     build(prefix, None, true)
 }
 
+pub fn start_simple_partial(prefix: &str) -> SyncHandle<LocalAuthority> {
+    use crate::logger_pls;
+    let mut builder = Builder::default();
+    builder.log_with(logger_pls());
+    builder.set_sharding(None);
+    builder.set_persistence(get_persistence_params(prefix));
+    builder.start_simple().unwrap()
+}
+
 fn wrap_sync<A, F>(fut: F) -> SyncHandle<A>
 where
     A: Authority + 'static,
@@ -2669,7 +2678,7 @@ fn add_union_with_one_parent() {
 
 #[test]
 fn unsubscribe_simple() {
-    let mut g = start_simple("unsubscribe_simple");
+    let mut g = start_simple_partial("unsubscribe_simple");
     let (a, _, c) = g.migrate(|mig| {
         let a = mig.add_base("a", &["a", "b"], Base::default());
         let b = mig.add_base("b", &["a", "b"], Base::default());
@@ -2694,7 +2703,7 @@ fn unsubscribe_simple() {
     mutb.insert(vec![id.clone(), 1.into()]).unwrap();
     sleep();
 
-    g.remove_leaf(a);
+    g.remove_base(a);
 
     let mut res = cq.lookup(&[id.clone()], true).unwrap();
     assert_eq!(res.len(), 1);
@@ -2705,8 +2714,8 @@ fn unsubscribe_simple() {
 
 #[test]
 fn unsubscribe_base_with_view() {
-    let mut g = start_simple("unsubscribe_simple");
-    let (a, _, c) = g.migrate(|mig| {
+    let mut g = start_simple_partial("unsubscribe_simple");
+    let (a, b, c) = g.migrate(|mig| {
         let a = mig.add_base("a", &["a", "b"], Base::default());
         let v = mig.add_ingredient("v", &["a", "b"], Project::new(a, &[0, 1], None, None));
         let b = mig.add_base("b", &["a", "b"], Base::default());
@@ -2719,27 +2728,69 @@ fn unsubscribe_base_with_view() {
         mig.maintain_anonymous(c, &[0]);
         (a, b, c)
     });
-    println!("{}", g.graphviz().unwrap());
-
     let mut cq = g.view("c").unwrap().into_sync();
     let id: DataType = 1.into();
-
     let mut muta = g.table("a").unwrap().into_sync();
     let mut mutb = g.table("b").unwrap().into_sync();
-    println!("Inserting");
+
+    println!("--Inserting");
     muta.insert(vec![id.clone(), 10.into()]).unwrap();
     mutb.insert(vec![id.clone(), 1.into()]).unwrap();
-    println!("Done inserting-starting to remove base");
+    println!("--Removing base");
+    g.remove_base(a);
     sleep();
 
-    g.remove_leaf(a);
-    sleep();
-    println!("{}", g.graphviz().unwrap());
-
-    println!("Looking up");
+    println!("--Looking up");
     let mut res = cq.lookup(&[id.clone()], true).unwrap();
     assert_eq!(res.len(), 1);
     assert!(res.iter().any(|r| r == &vec![id.clone(), 1.into()]));
 
+    println!("--Removing base");
+    g.remove_base(b);
+
+    println!("--Looking up");
+    res = cq.lookup(&[id.clone()], true).unwrap();
+    assert_eq!(res.len(), 0);
+    println!("{}", g.graphviz().unwrap());
+}
+
+#[test]
+fn unsubscribe_check_base_empty() {
+    let mut g = start_simple_partial("unsubscribe_check_base_empty");
+    let (a, _, c) = g.migrate(|mig| {
+        let a = mig.add_base("a", &["a", "b"], Base::default());
+        let b = mig.add_base("b", &["a", "b"], Base::default());
+
+        let mut emits = HashMap::new();
+        emits.insert(a, vec![0, 1]);
+        emits.insert(b, vec![0, 1]);
+        let u = Union::new(emits);
+        let c = mig.add_ingredient("c", &["a", "b"], u);
+        mig.maintain_anonymous(c, &[0]);
+        (a, b, c)
+    });
+
+    let mut cq = g.view("c").unwrap().into_sync();
+    let mut muta = g.table("a").unwrap().into_sync();
+    let id: DataType = 1.into();
+
+    muta.insert(vec![id.clone(), 10.into()]).unwrap();
+    sleep();
+
+    g.remove_base(a);
+
+    let mut res = cq.lookup(&[id.clone()], true).unwrap();
+    assert_eq!(res.len(), 0);
+
+    let p = g.migrate(move |mig| {
+        let p = mig.add_ingredient("p", &["a", "b"], Project::new(a.clone(), &[0, 1], None, None));
+        mig.maintain_anonymous(p, &[0]);
+        p
+    });
+    let mut pq = g.view("p").unwrap().into_sync();
+    let respq = pq.lookup(&[id.clone()], true).unwrap();
+    assert_eq!(respq.len(), 0);
+
+    println!("{}", g.graphviz().unwrap());
 }
 

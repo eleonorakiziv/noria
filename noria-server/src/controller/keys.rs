@@ -43,7 +43,7 @@ where
     let n = &graph[node];
 
     // have we reached a base node?
-    if n.is_base() {
+    if n.is_base() || n.is_dropped() {
         return vec![path];
     }
 
