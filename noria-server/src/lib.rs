@@ -407,6 +407,7 @@ pub use petgraph::graph::NodeIndex;
 pub mod manual {
     pub use crate::controller::migrate::Migration;
     pub use dataflow::node::special::Base;
+    pub use dataflow::node::special::base::OnRemove;
     pub use dataflow::ops;
     pub use nom_sql::Operator;
 }

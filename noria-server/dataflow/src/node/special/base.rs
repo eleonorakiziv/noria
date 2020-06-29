@@ -4,6 +4,9 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use vec_map::VecMap;
+use chickenize::Chickenize;
+use chrono::{NaiveDateTime, NaiveDate, NaiveTime};
+
 
 /// Base is used to represent the root nodes of the Noria data flow graph.
 ///
@@ -13,17 +16,30 @@ use vec_map::VecMap;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Base {
     primary_key: Option<Vec<usize>>,
-
     defaults: Vec<DataType>,
     dropped: Vec<usize>,
     unmodified: bool,
+    on_remove: OnRemove,
 }
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum OnRemove {
+    Anonymize(Vec<usize>),
+    Clear,
+    // Keep
+}
+
 
 impl Base {
     /// Create a non-durable base node operator.
     pub fn new(defaults: Vec<DataType>) -> Self {
         let mut base = Base::default();
         base.defaults = defaults;
+        base
+    }
+
+    pub fn new_with_remove_option(on_remove: OnRemove) -> Self {
+        let mut base = Base::default();
+        base.on_remove = on_remove;
         base
     }
 
@@ -94,7 +110,8 @@ impl Clone for Base {
 
             defaults: self.defaults.clone(),
             dropped: self.dropped.clone(),
-            unmodified: self.unmodified,
+            unmodified: self.unmodified.clone(),
+            on_remove: self.on_remove.clone(),
         }
     }
 }
@@ -107,6 +124,7 @@ impl Default for Base {
             defaults: Vec::new(),
             dropped: Vec::new(),
             unmodified: true,
+            on_remove: OnRemove::Clear,
         }
     }
 }
@@ -145,9 +163,10 @@ impl Base {
                     if let TableOperation::Insert(mut r) = r {
                         self.fix(&mut r);
                         Record::Positive(r)
-                    } else if let TableOperation::Delete { key} = r {
+                    } else if let TableOperation::Delete{key} = r {
                         Record::Negative(key)
-                    } else {
+                    }
+                    else {
                         unreachable!("unkeyed base got non-insert operation {:?}", r);
                     }
                 })
@@ -285,18 +304,72 @@ impl Base {
         &mut self,
         us: LocalNodeIndex,
         state: &StateMap,
-    ) -> Records {
+    ) -> (Vec<TableOperation>, Vec<TableOperation>) {
         let db = state
             .get(us)
             .expect("base with primary key must be materialized");
-        let actual_rows: Vec<Record> = db
+        let mut negatives: Vec<Record> = db
             .cloned_records()
             .into_iter()
             .map(|row| Record::Negative(row))
             .collect();
 
-        println!("actual rows returned {:?}", actual_rows.clone());
-        actual_rows.into()
+        let mut positives = Vec::new();
+
+        match &self.on_remove {
+            OnRemove::Anonymize(to_anonymize) => {
+                for row in negatives.clone().into_iter() {
+                    let (mut vec, _pos) = row.extract();
+
+                    for c in 0..vec.len() {
+                        if to_anonymize.contains(&c) {
+                            if vec[c].is_integer() {
+                                vec[c] = 0.into();
+                            }
+                            else if vec[c].is_string() {
+                                let curr: String = (&vec[c]).clone().into();
+                                vec[c] = curr.clone().chicken().into();
+                            }
+                            else if vec[c].is_datetime() {
+                                let default = NaiveDateTime::new(NaiveDate::from_ymd(1970, 1, 1), NaiveTime::from_hms_milli(0,0,0,0));
+                                vec[c] = DataType::Timestamp(default);
+                            }
+                            else {
+                                unimplemented!("only strings, integers and timestamps support anonymization");
+                            }
+                        }
+                    }
+                    positives.push(vec);
+                }
+            },
+            _ => {}
+        }
+        let mut p_key: Vec<usize> = Vec::new();
+        match &self.primary_key {
+            Some(k) => p_key = (*k).clone(),
+            None => {}
+        }
+
+        let mut neg_ops: Vec<TableOperation> = Vec::new();
+        for row in negatives.iter_mut() {
+            if p_key.is_empty() {
+                // if there is no key, include all the cols
+                p_key = (0..row.rec().len()).collect();
+            }
+            let keys_vec: Vec<DataType> = row.rec()
+                .into_iter()
+                .enumerate()
+                .filter(|&(i, _)| p_key.contains(&i))
+                .map(|(_, v)| v.clone())
+                .collect();
+            neg_ops.push(TableOperation::Delete {key: keys_vec});
+        }
+
+        let pos_ops: Vec<TableOperation> = positives
+            .into_iter()
+            .map(|r| TableOperation::Insert(r.to_vec()))
+            .collect();
+        (neg_ops, pos_ops)
     }
 }
 

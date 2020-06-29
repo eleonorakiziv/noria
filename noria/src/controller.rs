@@ -457,7 +457,7 @@ impl<A: Authority + 'static> ControllerHandle<A> {
         self.rpc("remove_query", view, "failed to remove query")
     }
 
-    /// Remove the given base view from the graph.
+    /// Remove the given base from the graph.
     ///
     /// `Self::poll_ready` must have returned `Async::Ready` before you call this method.
     pub fn remove_base(

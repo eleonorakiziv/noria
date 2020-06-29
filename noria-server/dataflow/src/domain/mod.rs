@@ -711,7 +711,6 @@ impl Domain {
                 m.link_mut().src = me;
             }
             m.link_mut().dst = childi;
-
             self.dispatch(m, sends, executor);
         }
     }

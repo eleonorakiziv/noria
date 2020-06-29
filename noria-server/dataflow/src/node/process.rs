@@ -4,7 +4,6 @@ use payload;
 use prelude::*;
 use std::collections::{HashSet, VecDeque};
 use std::mem;
-use noria::TableOperation;
 
 impl Node {
     #[allow(clippy::too_many_arguments)]
@@ -61,21 +60,26 @@ impl Node {
                         }));
                     }
                     Some(box Packet::Message {
-                        link, data, tracer,
+                        link, tracer, ..
                     }) => {
-                        let mut rs = b.notify_leave(addr, &*state);
+                        let (negatives, positives) = b.notify_leave(addr, &*state);
+
+                        let mut neg_rs = b.process(addr, negatives.clone(), &*state);
                         if keyed_by.is_none() {
-                            materialize(&mut rs, None, state.get_mut(addr));
+                            materialize(&mut neg_rs, None, state.get_mut(addr));
                         }
-                        let data: Vec<TableOperation> = rs
-                            .into_iter()
-                            .map(|r| TableOperation::Delete {key: r.to_vec()} )
-                            .collect();
-                        rs = b.process(addr, data, &*state);
+
+                        let mut pos_rs = b.process(addr, positives,  &*state);
+                        if keyed_by.is_none() {
+                            materialize(&mut pos_rs, None, state.get_mut(addr));
+                        }
+
+                        let mut rs: Vec<Record> = neg_rs.into();
+                        rs.append(&mut (pos_rs.into()));
 
                         *m = Some(Box::new(Packet::Message {
                             link,
-                            data: rs,
+                            data: rs.into(),
                             tracer,
                         }));
                     }

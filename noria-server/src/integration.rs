@@ -12,6 +12,7 @@ use dataflow::{DurabilityMode, PersistenceParameters};
 use futures::Future;
 use noria::consensus::{Authority, LocalAuthority};
 use noria::DataType;
+use dataflow::node::special::base::OnRemove;
 
 use std::collections::HashMap;
 use std::sync::Arc;

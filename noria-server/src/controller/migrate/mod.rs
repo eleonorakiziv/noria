@@ -142,7 +142,6 @@ impl<'a> Migration<'a> {
 
         let mut hm = HashMap::new();
         hm.insert(parent, fields);
-        println!("NEW PARENT");
         child_ingredient.add_parent_to_union(hm);
 
         // insert it into the graph

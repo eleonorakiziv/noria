@@ -36,6 +36,8 @@ extern crate tempfile;
 extern crate timekeeper;
 extern crate tokio;
 extern crate vec_map;
+extern crate chickenize;
+extern crate chrono;
 
 crate mod backlog;
 pub mod node;
