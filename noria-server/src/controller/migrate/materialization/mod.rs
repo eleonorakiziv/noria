@@ -176,6 +176,33 @@ impl Materializations {
                 indices.insert(ni, (vec![0], true));
             }
 
+            // walk the tree until we find materialized child.
+            let mut stack = Vec::new();
+            graph
+                .neighbors_directed(ni, petgraph::EdgeDirection::Outgoing)
+                .for_each(|i| stack.push(i));
+            while !stack.is_empty() {
+                let ci = stack.pop().unwrap();
+                let child = &graph[ci];
+                match self.get_status(ci, child) {
+                    MaterializationStatus::Not => {
+                        graph
+                            .neighbors_directed(ci, petgraph::EdgeDirection::Outgoing)
+                            .for_each(|i| {
+                                stack.push(i)
+                            });
+                    },
+                    _ => {
+                        child.with_reader(|r| {
+                            let cols = r.key();
+                            if cols.is_some() {
+                                indices.entry(ci).or_insert((cols.unwrap().to_vec(), false));
+                            }
+                        }).unwrap();
+                    },
+                }
+            }
+
             for (ni, (cols, lookup)) in indices {
                 debug!(self.log, "new indexing obligation";
                        "node" => ni.index(),
