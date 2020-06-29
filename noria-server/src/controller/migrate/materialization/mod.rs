@@ -758,7 +758,7 @@ impl Materializations {
             } else if self.added.contains_key(&node) {
                 reindex.push(node);
             }
-            // the parent is added to union, it is not the parents used to create the union. 
+            // the parent is added to union
             else if graph[node].is_union() {
                 let parents: HashSet <_> = graph
                     .neighbors_directed(node, petgraph::EdgeDirection::Incoming)

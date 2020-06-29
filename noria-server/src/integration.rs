@@ -2541,7 +2541,7 @@ fn remove_compound_query() {
     write.insert(vec![1.into(), 3.into(), "hello".into()]).unwrap();
     write2.insert(vec![2.into(), 3.into(), "goodbye".into()]).unwrap();
     
-    g.remove_query("answers");
+    g.remove_query("answers").expect("failed to remove query");
     assert_eq!(g.outputs().unwrap().len(), 0);
 
     let r1_txt = "\
@@ -2550,7 +2550,7 @@ fn remove_compound_query() {
     ";
     g.extend_recipe(r1_txt).unwrap();
     assert_eq!(g.outputs().unwrap().len(), 1);
-    g.remove_query("answers");
+    g.remove_query("answers").expect("failed to remove query");
 
     let r2_txt = "\
     CREATE TABLE answers_d (email_key int, lec int, answer text, PRIMARY KEY (lec));\
@@ -2559,239 +2559,246 @@ fn remove_compound_query() {
     g.extend_recipe(r2_txt).unwrap();
     assert_eq!(g.outputs().unwrap().len(), 1);
 }
+#[cfg(test)]
+mod parent_above_union {
+    use super::*;
 
-#[test]
-fn add_parent() {
-    let mut g = start_simple("add_parent");
-    let (_, _, c) = g.migrate(|mig| {
-        let a = mig.add_base("a", &["a", "b"], Base::default());
-        let b = mig.add_base("b", &["a", "b"], Base::default());
+    #[test]
+    fn add_parent() {
+        let mut g = start_simple_partial("add_parent");
+        let (_, _, c) = g.migrate(|mig| {
+            let a = mig.add_base("a", &["a", "b"], Base::default());
+            let b = mig.add_base("b", &["a", "b"], Base::default());
 
-        let mut emits = HashMap::new();
-        emits.insert(a, vec![0, 1]);
-        emits.insert(b, vec![0, 1]);
-        let u = Union::new(emits);
-        let c = mig.add_ingredient("c", &["a", "b"], u);
-        mig.maintain_anonymous(c, &[0]);
-        (a, b, c)
-    });
+            let mut emits = HashMap::new();
+            emits.insert(a, vec![0, 1]);
+            emits.insert(b, vec![0, 1]);
+            let u = Union::new(emits);
+            let c = mig.add_ingredient("c", &["a", "b"], u);
+            mig.maintain_anonymous(c, &[0]);
+            (a, b, c)
+        });
 
-    let mut cq = g.view("c").unwrap().into_sync();
-    let id: DataType = 1.into();
-    let _= g.migrate(move |mig| {
-        let d = mig.add_base("d", &["a", "b"], Base::default());
-        mig.add_parent(d, c, vec![0, 1])
-    });
-    let mut mutd = g.table("d").unwrap().into_sync();
-    mutd.insert(vec![id.clone(), 10.into()]).unwrap();
-    sleep();
-    let res = cq.lookup(&[id.clone()], true).unwrap();
-    assert!(res.iter().any(|r| r == &vec![id.clone(), 10.into()]));
-    assert_eq!(res.len(), 1);
-    println!("{}", g.graphviz().unwrap());
-}
+        let mut cq = g.view("c").unwrap().into_sync();
+        let id: DataType = 1.into();
+        let _ = g.migrate(move |mig| {
+            let d = mig.add_base("d", &["a", "b"], Base::default());
+            mig.add_parent(d, c, vec![0, 1])
+        });
+        let mut mutd = g.table("d").unwrap().into_sync();
+        mutd.insert(vec![id.clone(), 10.into()]).unwrap();
+        sleep();
+        let res = cq.lookup(&[id.clone()], true).unwrap();
+        assert!(res.iter().any(|r| r == &vec![id.clone(), 10.into()]));
+        assert_eq!(res.len(), 1);
+    }
 
-#[test]
-fn add_non_base_parent() {
-    let mut g = start_simple("add_parent");
-    let (_, _, c, d) = g.migrate(|mig| {
-        let a = mig.add_base("a", &["a", "b"], Base::default());
-        let b = mig.add_base("b", &["a", "b"], Base::default());
-        let d = mig.add_base("d", &["a", "b"], Base::default());
+    #[test]
+    fn add_non_base_parent() {
+        let mut g = start_simple_partial("add_non_base_parent");
+        let (_, _, c, d) = g.migrate(|mig| {
+            let a = mig.add_base("a", &["a", "b"], Base::default());
+            let b = mig.add_base("b", &["a", "b"], Base::default());
+            let d = mig.add_base("d", &["a", "b"], Base::default());
 
-        let mut emits = HashMap::new();
-        emits.insert(a, vec![0, 1]);
-        emits.insert(b, vec![0, 1]);
-        let u = Union::new(emits);
-        let c = mig.add_ingredient("c", &["a", "b"], u);
-        mig.maintain_anonymous(c, &[0]);
-        (a, b, c, d)
-    });
-    println!("{}", g.graphviz().unwrap());
+            let mut emits = HashMap::new();
+            emits.insert(a, vec![0, 1]);
+            emits.insert(b, vec![0, 1]);
+            let u = Union::new(emits);
+            let c = mig.add_ingredient("c", &["a", "b"], u);
+            mig.maintain_anonymous(c, &[0]);
+            (a, b, c, d)
+        });
 
-    let _= g.migrate(move |mig| {
-        let e = mig.add_ingredient("e", &["a", "b"], Identity::new(d));
-        mig.add_parent(e, c, vec![0, 1])
-    });
+        let _ = g.migrate(move |mig| {
+            let e = mig.add_ingredient("e", &["a", "b"], Identity::new(d));
+            mig.add_parent(e, c, vec![0, 1])
+        });
 
-    let id: DataType = 1.into();
+        let id: DataType = 1.into();
+        let mut mutd = g.table("d").unwrap().into_sync();
+        let mut cq = g.view("c").unwrap().into_sync();
+        mutd.insert(vec![id.clone(), 10.into()]).unwrap();
+        let res = cq.lookup(&[id.clone()], true).unwrap();
+        assert!(res.iter().any(|r| r == &vec![id.clone(), 10.into()]));
+        assert_eq!(res.len(), 1);
+    }
 
-    let mut mutd = g.table("d").unwrap().into_sync();
-    let mut cq = g.view("c").unwrap().into_sync();
-    mutd.insert(vec![id.clone(), 10.into()]).unwrap();
-    println!("Looking up!");
-    let res = cq.lookup(&[id.clone()], true).unwrap();
-    println!("Done looking up");
-    assert!(res.iter().any(|r| r == &vec![id.clone(), 10.into()]));
+    #[test]
+    fn empty_lookup() {
+        let mut g = start_simple_partial("empty_lookup");
+        let (_, _, _) = g.migrate(|mig| {
+            let a = mig.add_base("a", &["a", "b"], Base::default());
+            let b = mig.add_base("b", &["a", "b"], Base::default());
 
-    assert_eq!(res.len(), 1);
-}
+            let mut emits = HashMap::new();
+            emits.insert(a, vec![0, 1]);
+            emits.insert(b, vec![0, 1]);
+            let u = Union::new(emits);
+            let c = mig.add_ingredient("c", &["a", "b"], u);
+            mig.maintain_anonymous(c, &[0]);
+            (a, b, c)
+        });
+        let id: DataType = 1.into();
+        let mut cq = g.view("c").unwrap().into_sync();
+        let res = cq.lookup(&[id.clone()], true).unwrap();
+        assert_eq!(res.len(), 0)
+    }
 
-#[test]
-fn empty_lookup() {
-    let mut g = start_simple("add_parent");
-    let (_, _, _, _) = g.migrate(|mig| {
-        let a = mig.add_base("a", &["a", "b"], Base::default());
-        let b = mig.add_base("b", &["a", "b"], Base::default());
-        let d = mig.add_base("d", &["a", "b"], Base::default());
+    #[test]
+    fn add_union_with_one_parent() {
+        let mut g = start_simple_partial("add_union_with_one_parent");
+        let (_, c) = g.migrate(|mig| {
+            let a = mig.add_base("a", &["a", "b"], Base::default());
+            let mut emits = HashMap::new();
+            emits.insert(a, vec![0, 1]);
+            let u = Union::new(emits);
+            let c = mig.add_ingredient("c", &["a", "b"], u);
+            mig.maintain_anonymous(c, &[0]);
+            (a, c)
+        });
+        let id: DataType = 1.into();
 
-        let mut emits = HashMap::new();
-        emits.insert(a, vec![0, 1]);
-        emits.insert(b, vec![0, 1]);
-        let u = Union::new(emits);
-        let c = mig.add_ingredient("c", &["a", "b"], u);
-        mig.maintain_anonymous(c, &[0]);
-        (a, b, c, d)
-    });
-    println!("{}", g.graphviz().unwrap());
-    let id: DataType = 1.into();
-    let mut cq = g.view("c").unwrap().into_sync();
-    let res = cq.lookup(&[id.clone()], true).unwrap();
-    assert_eq!(res.len(), 0)
-}
+        let _ = g.migrate(move |mig| {
+            let b = mig.add_base("b", &["a", "b"], Base::default());
+            mig.add_parent(b, c, vec![0, 1])
+        });
 
+        let mut cq = g.view("c").unwrap().into_sync();
+        let res = cq.lookup(&[id.clone()], true).unwrap();
+        assert_eq!(res.len(), 0)
+    }
 
-#[test]
-fn add_union_with_one_parent() {
-    let mut g = start_simple("add_parent");
-    let (_, c) = g.migrate(|mig| {
-        let a = mig.add_base("a", &["a", "b"], Base::default());
+    #[test]
+    fn unsubscribe_simple() {
+        let mut g = start_simple_partial("unsubscribe_simple");
+        let a = g.migrate(|mig| {
+            let a = mig.add_base("a", &["a", "b"], Base::default());
+            let b = mig.add_base("b", &["a", "b"], Base::default());
 
-        let mut emits = HashMap::new();
-        emits.insert(a, vec![0, 1]);
-        let u = Union::new(emits);
-        let c = mig.add_ingredient("c", &["a", "b"], u);
-        mig.maintain_anonymous(c, &[0]);
-        (a, c)
-    });
-    let id: DataType = 1.into();
+            let mut emits = HashMap::new();
+            emits.insert(a, vec![0, 1]);
+            emits.insert(b, vec![0, 1]);
+            let u = Union::new(emits);
+            let c = mig.add_ingredient("c", &["a", "b"], u);
+            mig.maintain_anonymous(c, &[0]);
+            a
+        });
 
-    let _= g.migrate(move |mig| {
-        let b = mig.add_base("b", &["a", "b"], Base::default());
-        mig.add_parent(b, c, vec![0, 1])
-    });
-    println!("{}", g.graphviz().unwrap());
+        let mut cq = g.view("c").unwrap().into_sync();
+        let id: DataType = 1.into();
 
-    let mut cq = g.view("c").unwrap().into_sync();
-    let res = cq.lookup(&[id.clone()], true).unwrap();
-    assert_eq!(res.len(), 0)
-}
+        let mut muta = g.table("a").unwrap().into_sync();
+        let mut mutb = g.table("b").unwrap().into_sync();
+        muta.insert(vec![id.clone(), 10.into()]).unwrap();
+        mutb.insert(vec![id.clone(), 1.into()]).unwrap();
+        sleep();
 
-#[test]
-fn unsubscribe_simple() {
-    let mut g = start_simple_partial("unsubscribe_simple");
-    let (a, _, c) = g.migrate(|mig| {
-        let a = mig.add_base("a", &["a", "b"], Base::default());
-        let b = mig.add_base("b", &["a", "b"], Base::default());
+        g.remove_base(a).expect("failed to remove base");
 
-        let mut emits = HashMap::new();
-        emits.insert(a, vec![0, 1]);
-        emits.insert(b, vec![0, 1]);
-        let u = Union::new(emits);
-        let c = mig.add_ingredient("c", &["a", "b"], u);
-        mig.maintain_anonymous(c, &[0]);
-        (a, b, c)
-    });
-    println!("{}", g.graphviz().unwrap());
+        let res = cq.lookup(&[id.clone()], true).unwrap();
+        assert_eq!(res.len(), 1);
+        assert!(res.iter().any(|r| r == &vec![id.clone(), 1.into()]));
+    }
 
-    let mut cq = g.view("c").unwrap().into_sync();
-    let id: DataType = 1.into();
+    #[test]
+    fn unsubscribe_base_with_view() {
+        let mut g = start_simple_partial("unsubscribe_base_with_view");
+        let (a, b) = g.migrate(|mig| {
+            let a = mig.add_base("a", &["a", "b"], Base::default());
+            let v = mig.add_ingredient("v", &["a", "b"], Project::new(a, &[0, 1], None, None));
+            let b = mig.add_base("b", &["a", "b"], Base::default());
 
-    let mut muta = g.table("a").unwrap().into_sync();
-    let mut mutb = g.table("b").unwrap().into_sync();
+            let mut emits = HashMap::new();
+            emits.insert(v, vec![0, 1]);
+            emits.insert(b, vec![0, 1]);
+            let u = Union::new(emits);
+            let c = mig.add_ingredient("c", &["a", "b"], u);
+            mig.maintain_anonymous(c, &[0]);
+            (a, b)
+        });
+        let mut cq = g.view("c").unwrap().into_sync();
+        let id: DataType = 1.into();
+        let mut muta = g.table("a").unwrap().into_sync();
+        let mut mutb = g.table("b").unwrap().into_sync();
+        muta.insert(vec![id.clone(), 10.into()]).unwrap();
+        mutb.insert(vec![id.clone(), 1.into()]).unwrap();
 
-    muta.insert(vec![id.clone(), 10.into()]).unwrap();
-    mutb.insert(vec![id.clone(), 1.into()]).unwrap();
-    sleep();
+        g.remove_base(a).expect("failed to remove base");
+        sleep();
 
-    g.remove_base(a);
+        let mut res = cq.lookup(&[id.clone()], true).unwrap();
+        assert_eq!(res.len(), 1);
+        assert!(res.iter().any(|r| r == &vec![id.clone(), 1.into()]));
 
-    let mut res = cq.lookup(&[id.clone()], true).unwrap();
-    assert_eq!(res.len(), 1);
-    assert!(res.iter().any(|r| r == &vec![id.clone(), 1.into()]));
+        g.remove_base(b).expect("failed to remove base");
 
-    println!("{}", g.graphviz().unwrap());
-}
+        res = cq.lookup(&[id.clone()], true).unwrap();
+        assert_eq!(res.len(), 0);
+    }
 
-#[test]
-fn unsubscribe_base_with_view() {
-    let mut g = start_simple_partial("unsubscribe_simple");
-    let (a, b, c) = g.migrate(|mig| {
-        let a = mig.add_base("a", &["a", "b"], Base::default());
-        let v = mig.add_ingredient("v", &["a", "b"], Project::new(a, &[0, 1], None, None));
-        let b = mig.add_base("b", &["a", "b"], Base::default());
+    #[test]
+    fn anonymize_on_remove() {
+        let mut g = start_simple_partial("anonymize_on_remove");
+        let a = g.migrate(|mig| {
+            let a = mig.add_base("a", &["name", "apikey", "color", "city"], Base::new_with_remove_option(OnRemove::Anonymize(vec![0, 3]))); //.with_key(vec![1])
+            let b = mig.add_base("b", &["name", "apikey", "color", "city"], Base::default());
 
-        let mut emits = HashMap::new();
-        emits.insert(v, vec![0, 1]);
-        emits.insert(b, vec![0, 1]);
-        let u = Union::new(emits);
-        let c = mig.add_ingredient("c", &["a", "b"], u);
-        mig.maintain_anonymous(c, &[0]);
-        (a, b, c)
-    });
-    let mut cq = g.view("c").unwrap().into_sync();
-    let id: DataType = 1.into();
-    let mut muta = g.table("a").unwrap().into_sync();
-    let mut mutb = g.table("b").unwrap().into_sync();
+            let mut emits = HashMap::new();
+            emits.insert(a, vec![0, 1, 2, 3]);
+            emits.insert(b, vec![0, 1, 2, 3]);
+            let u = Union::new(emits);
+            let c = mig.add_ingredient("c", &["name", "apikey", "color", "city"], u);
+            mig.maintain_anonymous(c, &[2]);
+            a
+        });
+        let mut cq = g.view("c").unwrap().into_sync();
+        let mut muta = g.table("a").unwrap().into_sync();
+        let mut mutb = g.table("b").unwrap().into_sync();
 
-    println!("--Inserting");
-    muta.insert(vec![id.clone(), 10.into()]).unwrap();
-    mutb.insert(vec![id.clone(), 1.into()]).unwrap();
-    println!("--Removing base");
-    g.remove_base(a);
-    sleep();
+        muta.insert(vec!["ekiziv".into(), 10.into(), "blue".into(), "maykop".into()]).unwrap();
+        mutb.insert(vec!["gmatute".into(), 11.into(), "blue".into(), "maykop".into()]).unwrap();
+        sleep();
 
-    println!("--Looking up");
-    let mut res = cq.lookup(&[id.clone()], true).unwrap();
-    assert_eq!(res.len(), 1);
-    assert!(res.iter().any(|r| r == &vec![id.clone(), 1.into()]));
+        g.remove_base(a).expect("failed to remove the base");
 
-    println!("--Removing base");
-    g.remove_base(b);
+        let res = cq.lookup(&["blue".into()], true).unwrap();
+        assert_eq!(res.len(), 2);
+        assert!(res.iter().any(|r| r == &vec!["chicken".into(), 10.into(), "blue".into(), "chicken".into()]));
+        assert!(res.iter().any(|r| r == &vec!["gmatute".into(), 11.into(), "blue".into(), "maykop".into()]));
+    }
 
-    println!("--Looking up");
-    res = cq.lookup(&[id.clone()], true).unwrap();
-    assert_eq!(res.len(), 0);
-    println!("{}", g.graphviz().unwrap());
-}
+    #[test]
+    fn unsubscribe_then_lookup_with_bogokey() {
+        let mut g = start_simple_partial("unsubscribe_then_lookup_with_bogokey");
+        let c = g.migrate(|mig| {
+            let a = mig.add_base("a", &["email_key", "lec", "q", "answer"], Base::new_with_remove_option(OnRemove::Anonymize(vec![0])).with_key(vec![1, 2]));
 
-#[test]
-fn unsubscribe_check_base_empty() {
-    let mut g = start_simple_partial("unsubscribe_check_base_empty");
-    let (a, _, c) = g.migrate(|mig| {
-        let a = mig.add_base("a", &["a", "b"], Base::default());
-        let b = mig.add_base("b", &["a", "b"], Base::default());
+            let mut emits = HashMap::new();
+            emits.insert(a, vec![0, 1, 2, 3]);
+            let u = Union::new(emits);
+            let c = mig.add_ingredient("answers_union", &["email_key", "lec", "q", "answer"], u);
+            let answers_by_lec = mig.add_ingredient("answers_by_lec", &["email_key", "lec", "q", "answer"], Project::new(c, &[0, 1, 2, 3], None, None));
+            mig.maintain_anonymous(answers_by_lec, &[1]);
+            c
+        });
+        let b = g.migrate(move |mig| {
+            let b = mig.add_base("b", &["email_key", "lec", "q", "answer"], Base::new_with_remove_option(OnRemove::Anonymize(vec![0])).with_key(vec![1, 2]));
+            mig.add_parent(b, c, vec![0, 1, 2, 3]);
+            b
+        });
 
-        let mut emits = HashMap::new();
-        emits.insert(a, vec![0, 1]);
-        emits.insert(b, vec![0, 1]);
-        let u = Union::new(emits);
-        let c = mig.add_ingredient("c", &["a", "b"], u);
-        mig.maintain_anonymous(c, &[0]);
-        (a, b, c)
-    });
+        let mut muta = g.table("a").unwrap().into_sync();
+        let mut mutb = g.table("b").unwrap().into_sync();
 
-    let mut cq = g.view("c").unwrap().into_sync();
-    let mut muta = g.table("a").unwrap().into_sync();
-    let id: DataType = 1.into();
+        muta.insert(vec!["ekiziv".into(), 0.into(), 0.into(), "hello".into()]).unwrap();
+        mutb.insert(vec!["gmatute".into(), 0.into(), 0.into(), "maykop".into()]).unwrap();
 
-    muta.insert(vec![id.clone(), 10.into()]).unwrap();
-    sleep();
+        g.remove_base(b).expect("failed to remove base");
 
-    g.remove_base(a);
-
-    let mut res = cq.lookup(&[id.clone()], true).unwrap();
-    assert_eq!(res.len(), 0);
-
-    let p = g.migrate(move |mig| {
-        let p = mig.add_ingredient("p", &["a", "b"], Project::new(a.clone(), &[0, 1], None, None));
-        mig.maintain_anonymous(p, &[0]);
-        p
-    });
-    let mut pq = g.view("p").unwrap().into_sync();
-    let respq = pq.lookup(&[id.clone()], true).unwrap();
-    assert_eq!(respq.len(), 0);
-
-    println!("{}", g.graphviz().unwrap());
+        let mut cq = g.view("answers_by_lec").unwrap().into_sync();
+        let res = cq.lookup(&[0.into()], true).unwrap();
+        assert_eq!(res.len(), 2);
+    }
 }
 

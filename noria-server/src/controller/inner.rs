@@ -467,7 +467,6 @@ impl ControllerInner {
                 }
             },
         }
-        sleep(Duration::from_millis(200));
     }
 
     /// Construct `ControllerInner` with a specified listening interface
@@ -1207,7 +1206,7 @@ impl ControllerInner {
         graphviz(&self.ingredients, detailed, &self.materializations)
     }
 
-    fn remove_base(&mut self, mut node: NodeIndex) -> Result<(), String> {
+    fn remove_base(&mut self, node: NodeIndex) -> Result<(), String> {
         assert!(self.ingredients[node].is_base());
         self.send_negative_records(node);
         self.ingredients[node].remove();
@@ -1261,9 +1260,9 @@ impl ControllerInner {
                             .neighbors_directed(nr, petgraph::EdgeDirection::Outgoing)
                             .for_each(|ni| children.push(ni));
                         for child in children {
-                            self.remove_leaf(child);
+                            self.remove_leaf(child).expect("failed to remove a leaf");
                         }
-                        self.remove_leaf(nr);
+                        self.remove_leaf(nr).expect("failed to remove a leaf");
                     }
                 }
             }
@@ -1431,7 +1430,7 @@ impl ControllerInner {
         let updated = self.recipe.clone();
         let replaced = old.replace(updated).unwrap();
 
-        self.apply_recipe(replaced);
+        self.apply_recipe(replaced).expect("failed to apply recipe in remove_query");
         if authority
             .read_modify_write(STATE_KEY, |state: Option<ControllerState>| match state {
                 None => unreachable!(),
