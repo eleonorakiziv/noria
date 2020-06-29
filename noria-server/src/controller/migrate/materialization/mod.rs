@@ -1014,15 +1014,15 @@ impl Materializations {
                         }
                     }
                     for node in materialized {
-                        println!("Setup new paths for {:?}", node);
+                        debug!(self.log, "setup new path for"; "node" => ni.index());
                         let mut index_on = HashSet::new();
                         self.setup(node, &mut index_on, graph, domains, workers, replies); // mutable reference
                     }
                 } else {
                     debug!(self.log, "no need to replay non-materialized view"; "node" => ni.index());
                 }
+                self.new_parents.clear();
             }
-            self.new_parents.clear();
             return;
         }
 
