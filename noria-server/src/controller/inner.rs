@@ -771,10 +771,13 @@ impl ControllerInner {
     fn inputs(&self) -> BTreeMap<String, NodeIndex> {
         self.ingredients
             .neighbors_directed(self.source, petgraph::EdgeDirection::Outgoing)
-            .map(|n| {
+            .filter_map(|n| {
                 let base = &self.ingredients[n];
-                assert!(base.is_base());
-                (base.name().to_owned(), n)
+                if base.is_base() {
+                    Some((base.name().to_owned(), n))
+                } else {
+                    None
+                }
             })
             .collect()
     }
