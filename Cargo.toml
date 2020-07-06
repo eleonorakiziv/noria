@@ -8,3 +8,6 @@ members = [
 
 [profile.release]
 debug=true
+
+[patch.'https://github.com/tower-rs/tokio-tower.git']
+tokio-tower = { git = "https://github.com/ms705/tokio-tower.git", branch = "patched-for-old-noria" }

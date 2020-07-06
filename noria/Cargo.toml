@@ -36,7 +36,7 @@ arccstr = "1.2.0"
 fnv = "1.0.5"
 chrono = { version = "0.4.0", features = ["serde"] }
 tower-service = "0.2"
-tower-balance = { git = "https://github.com/tower-rs/tower.git" }
+tower-balance = { git = "https://github.com/tower-rs/tower.git", rev = "72219ce" }
 tower-discover = "0.1"
 tower-buffer = "0.1"
 tokio-tower = { git = "https://github.com/tower-rs/tokio-tower.git", rev = "2e1d40903b9a294d8c984612400838dcdc8fd758" }
