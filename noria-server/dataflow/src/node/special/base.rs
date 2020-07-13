@@ -1,10 +1,11 @@
 use chickenize::Chickenize;
-use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
+use chrono::{Duration, NaiveDate, NaiveDateTime, NaiveTime};
 use noria::{Modification, Operation, TableOperation};
 use prelude::*;
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::time;
 use vec_map::VecMap;
 
 /// Base is used to represent the root nodes of the Noria data flow graph.
@@ -19,6 +20,7 @@ pub struct Base {
     dropped: Vec<usize>,
     unmodified: bool,
     on_remove: OnRemove,
+    expires_at: Option<NaiveDateTime>,
 }
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum OnRemove {
@@ -44,6 +46,23 @@ impl Base {
     /// Builder with a known primary key.
     pub fn with_key(mut self, primary_key: Vec<usize>) -> Base {
         self.primary_key = Some(primary_key);
+        self
+    }
+
+    // Creates o prolongs a lease for this base table
+    pub fn set_lease(mut self, ttl_std: time::Duration) -> Self {
+        let curr = chrono::Local::now().naive_local();
+        let ttl = Duration::from_std(ttl_std).unwrap();
+        match self.expires_at {
+            None => {
+                // create a lease
+                self.expires_at = curr.checked_add_signed(ttl);
+            }
+            Some(t) => {
+                // prolong the lease
+                self.expires_at = t.checked_add_signed(ttl);
+            }
+        }
         self
     }
 
@@ -96,6 +115,22 @@ impl Base {
             row.extend(self.defaults.iter().skip(rlen).cloned());
         }
     }
+
+    pub fn is_expired(&self) -> bool {
+        println!("Checking if {:?} it is expired!", self);
+        match self.expires_at {
+            Some(t) => {
+                let curr = chrono::Local::now().naive_local();
+                if curr >= t {
+                    println!("Expired!");
+                    true
+                } else {
+                    false
+                }
+            }
+            None => false,
+        }
+    }
 }
 
 /// A Base clone must have a different unique_id so that no two copies write to the same file.
@@ -110,6 +145,7 @@ impl Clone for Base {
             dropped: self.dropped.clone(),
             unmodified: self.unmodified.clone(),
             on_remove: self.on_remove.clone(),
+            expires_at: self.expires_at.clone(),
         }
     }
 }
@@ -123,6 +159,7 @@ impl Default for Base {
             dropped: Vec::new(),
             unmodified: true,
             on_remove: OnRemove::Clear,
+            expires_at: None,
         }
     }
 }

@@ -526,4 +526,11 @@ impl Node {
             false
         }
     }
+    pub fn is_expired(&self) -> bool {
+        if let NodeType::Base(b) = &self.inner {
+            b.is_expired()
+        } else {
+            unimplemented!("only bases implement lease functionality");
+        }
+    }
 }

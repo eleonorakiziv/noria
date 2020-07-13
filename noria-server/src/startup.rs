@@ -20,6 +20,7 @@ use tokio_io_pool;
 
 use crate::handle::Handle;
 use crate::Config;
+use std::time::{Duration, Instant};
 
 #[allow(clippy::large_enum_variant)]
 crate enum Event {
@@ -40,6 +41,7 @@ crate enum Event {
         f: Box<dyn FnOnce(&mut crate::controller::migrate::Migration) + Send + 'static>,
         done: futures::sync::oneshot::Sender<()>,
     },
+    CheckLeases,
 }
 
 use std::fmt;
@@ -54,6 +56,7 @@ impl fmt::Debug for Event {
             #[cfg(test)]
             Event::IsReady(..) => write!(f, "IsReady"),
             Event::ManualMigration { .. } => write!(f, "ManualMigration{{..}}"),
+            Event::CheckLeases => write!(f, "Check leases"),
         }
     }
 }
@@ -145,6 +148,7 @@ pub(super) fn start_instance<A: Authority + 'static>(
                     Event::CampaignError(..) => fw(e, true),
                     #[cfg(test)]
                     Event::IsReady(..) => fw(e, true),
+                    Event::CheckLeases => fw(e, true),
                 }
                 .map_err(|e| panic!("{:?}", e))
             })
@@ -176,8 +180,33 @@ pub(super) fn start_instance<A: Authority + 'static>(
         memory_check_frequency,
         log.clone(),
     ));
-
+    tokio::spawn(check_lease_expiration(&valve, tx.clone()));
     future::Either::B(Handle::new(authority, tx, trigger, iopool))
+}
+
+fn check_lease_expiration(
+    valve: &Valve,
+    snd: UnboundedSender<Event>,
+) -> impl Future<Item = (), Error = ()> {
+    let send_check_lease = |snd: &UnboundedSender<Event>| -> Result<(), failure::Error> {
+        snd.unbounded_send(Event::CheckLeases)
+            .expect("failed to send a CheckLeases event");
+        Ok(())
+    };
+
+    let timer = valve.wrap(tokio::timer::Interval::new(
+        Instant::now(),
+        Duration::from_millis(1000),
+    ));
+    tokio::spawn(
+        timer
+            .for_each(move |_| {
+                println!("Sending a CheckLease event");
+                send_check_lease(&snd).map_err(|e| panic!("{:?}", e))
+            })
+            .map_err(|e| panic!("{:?}", e)),
+    );
+    future::ok(())
 }
 
 fn listen_internal(

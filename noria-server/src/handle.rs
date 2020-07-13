@@ -104,7 +104,6 @@ impl<A: Authority + 'static> Handle<A> {
             .unwrap()
             .unbounded_send(Event::ManualMigration { f: b, done: fin_tx })
             .unwrap();
-        println!("fin_rx: {:?}", fin_rx);
         match fin_rx.wait() {
             Ok(()) => ret_rx.wait().unwrap(),
             Err(e) => unreachable!("{:?}", e),

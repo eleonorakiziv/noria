@@ -2839,3 +2839,22 @@ mod parent_above_union {
         assert_eq!(res.len(), 2);
     }
 }
+
+#[test]
+// Creates two bases, one with a lease.
+fn test_leases() {
+    let mut g = start_simple_partial("test_leases");
+    let (a, b) = g.migrate(|mig| {
+        let a = mig.add_base(
+            "a",
+            &["name", "apikey", "color", "city"],
+            Base::default().set_lease(Duration::from_millis(10000)),
+        );
+        let b = mig.add_base("b", &["name", "apikey", "color", "city"], Base::default());
+        (a, b)
+    });
+    println!("inputs: {:?}", g.inputs());
+    assert_eq!(g.inputs().unwrap().len(), 2);
+    thread::sleep(Duration::from_millis(10000));
+    assert_eq!(g.inputs().unwrap().len(), 1);
+}

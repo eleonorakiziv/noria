@@ -433,6 +433,23 @@ impl ControllerInner {
         Ok(())
     }
 
+    pub(super) fn handle_leases(&mut self) -> Result<(), io::Error> {
+        let indices = self.ingredients.node_indices();
+        let expired_nodes: Vec<NodeIndex> = indices
+            .into_iter()
+            .map(|index| &self.ingredients[index])
+            .filter(|n| n.is_base())
+            .filter(|n| n.is_expired())
+            .map(|n| n.global_addr())
+            .collect();
+
+        for expired in expired_nodes {
+            self.remove_base(expired)
+                .expect("failed to remove the node");
+        }
+        Ok(())
+    }
+
     pub fn send_negative_records(&mut self, ni: NodeIndex) {
         let parent = &mut self.ingredients[ni.clone()];
         println!("Sending negative records to all children");
@@ -1208,7 +1225,7 @@ impl ControllerInner {
         graphviz(&self.ingredients, detailed, &self.materializations)
     }
 
-    fn remove_base(&mut self, node: NodeIndex) -> Result<(), String> {
+    pub fn remove_base(&mut self, node: NodeIndex) -> Result<(), String> {
         assert!(self.ingredients[node].is_base());
         self.send_negative_records(node);
         self.ingredients[node].remove();
