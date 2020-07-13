@@ -188,18 +188,18 @@ impl Materializations {
                     MaterializationStatus::Not => {
                         graph
                             .neighbors_directed(ci, petgraph::EdgeDirection::Outgoing)
-                            .for_each(|i| {
-                                stack.push(i)
-                            });
-                    },
+                            .for_each(|i| stack.push(i));
+                    }
                     _ => {
-                        child.with_reader(|r| {
-                            let cols = r.key();
-                            if cols.is_some() {
-                                indices.entry(ci).or_insert((cols.unwrap().to_vec(), false));
-                            }
-                        }).unwrap();
-                    },
+                        child
+                            .with_reader(|r| {
+                                let cols = r.key();
+                                if cols.is_some() {
+                                    indices.entry(ci).or_insert((cols.unwrap().to_vec(), false));
+                                }
+                            })
+                            .unwrap();
+                    }
                 }
             }
 
@@ -787,7 +787,7 @@ impl Materializations {
             }
             // the parent is added to union
             else if graph[node].is_union() {
-                let parents: HashSet <_> = graph
+                let parents: HashSet<_> = graph
                     .neighbors_directed(node, petgraph::EdgeDirection::Incoming)
                     .filter(|n| new.contains(&n))
                     .collect();
@@ -798,7 +798,6 @@ impl Materializations {
         // first, we add any new indices to existing nodes
         for node in reindex {
             let mut index_on = self.added.remove(&node).unwrap();
-
 
             // are they trying to make a non-materialized node materialized?
             if self.have[&node] == index_on {
@@ -908,9 +907,9 @@ impl Materializations {
 
                 if reconstructed {
                     info!(self.log, "reconstruction completed";
-                "ms" => start.elapsed().as_millis(),
-                "node" => ni.index(),
-                );
+                    "ms" => start.elapsed().as_millis(),
+                    "node" => ni.index(),
+                    );
                 }
             } else {
                 let start = ::std::time::Instant::now();
@@ -934,9 +933,9 @@ impl Materializations {
 
                 if reconstructed {
                     info!(self.log, "reconstruction completed";
-                "ms" => start.elapsed().as_millis(),
-                "node" => ni.index(),
-                );
+                    "ms" => start.elapsed().as_millis(),
+                    "node" => ni.index(),
+                    );
                 }
             }
         }
@@ -973,13 +972,12 @@ impl Materializations {
                 has_state = true;
             }
         })
-            .unwrap_or(());
+        .unwrap_or(());
 
         let union_children: Vec<_> = graph
             .neighbors_directed(ni, petgraph::EdgeDirection::Outgoing)
             .filter(|&n| graph[n].is_union())
             .collect();
-
 
         if n.is_base() || !has_state {
             assert!(!self.partial.contains(&ni));
@@ -1007,16 +1005,15 @@ impl Materializations {
                                         .for_each(|ni| stack.push(ni));
                                 }
                                 materialized.extend(readers);
-                            },
-                            _ => {
-                                materialized.push(ni)
                             }
+                            _ => materialized.push(ni),
                         }
                     }
                     for node in materialized {
                         debug!(self.log, "setup new path for"; "node" => ni.index());
                         let mut index_on = HashSet::new();
-                        self.setup(node, &mut index_on, graph, domains, workers, replies); // mutable reference
+                        self.setup(node, &mut index_on, graph, domains, workers, replies);
+                        // mutable reference
                     }
                 } else {
                     debug!(self.log, "no need to replay non-materialized view"; "node" => ni.index());

@@ -59,9 +59,7 @@ impl Node {
                             tracer,
                         }));
                     }
-                    Some(box Packet::Message {
-                        link, tracer, ..
-                    }) => {
+                    Some(box Packet::Message { link, tracer, .. }) => {
                         let (negatives, positives) = b.notify_leave(addr, &*state);
 
                         let mut neg_rs = b.process(addr, negatives.clone(), &*state);
@@ -69,7 +67,7 @@ impl Node {
                             materialize(&mut neg_rs, None, state.get_mut(addr));
                         }
 
-                        let mut pos_rs = b.process(addr, positives,  &*state);
+                        let mut pos_rs = b.process(addr, positives, &*state);
                         if keyed_by.is_none() {
                             materialize(&mut pos_rs, None, state.get_mut(addr));
                         }

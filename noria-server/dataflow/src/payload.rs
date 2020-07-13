@@ -10,12 +10,11 @@ use noria::channel;
 use noria::internal::LocalOrNot;
 use prelude::*;
 
+use ops::union::Emit;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::net::SocketAddr;
 use std::time;
-use ops::union::Emit;
-
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ReplayPathSegment {
@@ -86,21 +85,24 @@ pub struct SourceChannelIdentifier {
 pub enum Packet {
     // Data messages
     //
-    Input { //0
+    Input {
+        //0
         inner: LocalOrNot<Input>,
         src: Option<SourceChannelIdentifier>,
         senders: Vec<SourceChannelIdentifier>,
     },
 
     /// Regular data-flow update.
-    Message { //1
+    Message {
+        //1
         link: Link,
         data: Records,
         tracer: Tracer,
     },
 
     /// Update that is part of a tagged data-flow replay path.
-    ReplayPiece {//2
+    ReplayPiece {
+        //2
         link: Link,
         tag: Tag,
         data: Records,
@@ -108,14 +110,16 @@ pub enum Packet {
     },
 
     /// Trigger an eviction from the target node.
-    Evict { //3
+    Evict {
+        //3
         node: Option<LocalNodeIndex>,
         num_bytes: usize,
     },
 
     /// Evict the indicated keys from the materialization targed by the replay path `tag` (along
     /// with any other materializations below it).
-    EvictKeys { //4
+    EvictKeys {
+        //4
         link: Link,
         tag: Tag,
         keys: Vec<Vec<DataType>>,
@@ -129,32 +133,37 @@ pub enum Packet {
     // Control messages
     //
     /// Add a new node to this domain below the given parents.
-    AddNode { //6
+    AddNode {
+        //6
         node: Node,
         parents: Vec<LocalNodeIndex>,
         union_children: HashMap<LocalNodeIndex, Emit>,
     },
 
     /// Direct domain to remove some nodes.
-    RemoveNodes { //7
+    RemoveNodes {
+        //7
         nodes: Vec<LocalNodeIndex>,
     },
 
     /// Add a new column to an existing `Base` node.
-    AddBaseColumn { // 8
+    AddBaseColumn {
+        // 8
         node: LocalNodeIndex,
         field: String,
         default: DataType,
     },
 
     /// Drops an existing column from a `Base` node.
-    DropBaseColumn { //9
+    DropBaseColumn {
+        //9
         node: LocalNodeIndex,
         column: usize,
     },
 
     /// Update Egress node.
-    UpdateEgress { // 10
+    UpdateEgress {
+        // 10
         node: LocalNodeIndex,
         new_tx: Option<(NodeIndex, LocalNodeIndex, ReplicaAddr)>,
         new_tag: Option<(Tag, NodeIndex)>,
@@ -163,13 +172,15 @@ pub enum Packet {
     /// Add a shard to a Sharder node.
     ///
     /// Note that this *must* be done *before* the sharder starts being used!
-    UpdateSharder { //11
+    UpdateSharder {
+        //11
         node: LocalNodeIndex,
         new_txs: (LocalNodeIndex, Vec<ReplicaAddr>),
     },
 
     /// Add a streamer to an existing reader node.
-    AddStreamer { //12
+    AddStreamer {
+        //12
         node: LocalNodeIndex,
         new_streamer: channel::StreamSender<Vec<node::StreamUpdate>>,
     },
@@ -177,18 +188,21 @@ pub enum Packet {
     /// Set up a fresh, empty state for a node, indexed by a particular column.
     ///
     /// This is done in preparation of a subsequent state replay.
-    PrepareState {// 13
+    PrepareState {
+        // 13
         node: LocalNodeIndex,
         state: InitialState,
     },
 
     /// Probe for the number of records in the given node's state
-    StateSizeProbe { // 14
+    StateSizeProbe {
+        // 14
         node: LocalNodeIndex,
     },
 
     /// Inform domain about a new replay path.
-    SetupReplayPath { //15
+    SetupReplayPath {
+        //15
         tag: Tag,
         source: Option<LocalNodeIndex>,
         path: Vec<ReplayPathSegment>,
@@ -197,28 +211,32 @@ pub enum Packet {
     },
 
     /// Ask domain (nicely) to replay a particular key.
-    RequestPartialReplay { //16
+    RequestPartialReplay {
+        //16
         tag: Tag,
         key: Vec<DataType>,
         unishard: bool,
     },
 
     /// Ask domain (nicely) to replay a particular key into a Reader.
-    RequestReaderReplay { //17
+    RequestReaderReplay {
+        //17
         node: LocalNodeIndex,
         cols: Vec<usize>,
         key: Vec<DataType>,
     },
 
     /// Instruct domain to replay the state of a particular node along an existing replay path.
-    StartReplay { //18
+    StartReplay {
+        //18
         tag: Tag,
         from: LocalNodeIndex,
     },
 
     /// Sent to instruct a domain that a particular node should be considered ready to process
     /// updates.
-    Ready { // 19
+    Ready {
+        // 19
         node: LocalNodeIndex,
         purge: bool,
         index: HashSet<Vec<usize>>,
@@ -384,13 +402,25 @@ impl fmt::Debug for Packet {
             }
             Packet::RequestPartialReplay { ref tag, .. } => {
                 write!(f, "Packet::RequestPartialReplay({:?})", tag)
-            },
-            Packet::AddNode {ref node, ref parents, ref union_children } => {
-                write!(f, "Packet::AddNode({:?})(parents:{:?}) children {:?}", node, parents, union_children)
-            },
-            Packet::Ready {ref node, ref purge, ref index} => {
-                write!(f, "Packet::Ready node {:?}, purge: {:?}, index {:?}", node, purge, index)
             }
+            Packet::AddNode {
+                ref node,
+                ref parents,
+                ref union_children,
+            } => write!(
+                f,
+                "Packet::AddNode({:?})(parents:{:?}) children {:?}",
+                node, parents, union_children
+            ),
+            Packet::Ready {
+                ref node,
+                ref purge,
+                ref index,
+            } => write!(
+                f,
+                "Packet::Ready node {:?}, purge: {:?}, index {:?}",
+                node, purge, index
+            ),
             Packet::ReplayPiece {
                 ref link,
                 ref tag,

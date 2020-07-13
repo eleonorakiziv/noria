@@ -670,6 +670,4 @@ where
         let fut = self.handle()?.remove_base(ni);
         self.run(fut)
     }
-
-
 }

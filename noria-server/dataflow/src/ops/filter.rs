@@ -4,9 +4,8 @@ use std::fmt::{self, Display};
 use std::sync;
 
 pub use nom_sql::Operator;
-use prelude::*;
 use ops::union::Emit;
-
+use prelude::*;
 
 /// Filters incoming records according to some filter.
 #[derive(Debug, Clone, Serialize, Deserialize)]

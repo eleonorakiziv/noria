@@ -747,17 +747,17 @@ impl Domain {
                 println!("consumed {:?}", consumed);
                 match consumed {
                     // workaround #16223
-                    Packet::AddNode { node, parents, union_children } => {
+                    Packet::AddNode {
+                        node,
+                        parents,
+                        union_children,
+                    } => {
                         let addr = (&node).local_addr();
                         self.not_ready.insert(addr);
 
                         // add a child node
                         for p in parents {
-                            self.nodes
-                                .get_mut(p)
-                                .unwrap()
-                                .borrow_mut()
-                                .add_child(addr);
+                            self.nodes.get_mut(p).unwrap().borrow_mut().add_child(addr);
                         }
                         self.nodes.insert(addr, cell::RefCell::new(node));
 

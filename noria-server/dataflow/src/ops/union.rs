@@ -57,7 +57,7 @@ impl Clone for Union {
             replay_key: None,
             replay_pieces: HashMap::new(),
             full_wait_state: FullWait::None,
-            unassigned: self.unassigned.clone()
+            unassigned: self.unassigned.clone(),
         }
     }
 }
@@ -68,7 +68,6 @@ impl Union {
     /// When receiving an update from node `a`, a union will emit the columns selected in `emit[a]`.
     /// `emit` only supports omitting columns, not rearranging them.
     pub fn new(emit: HashMap<NodeIndex, Vec<usize>>) -> Union {
-
         assert!(!emit.is_empty());
         for emit in emit.values() {
             let mut last = &emit[0];
@@ -127,20 +126,25 @@ impl Ingredient for Union {
     // consider updating columns as well
     fn add_parent_to_union(&mut self, fields: HashMap<NodeIndex, Vec<usize>>) {
         self.required += 1;
-        let new_emit: HashMap<IndexPair, Vec<usize>> = fields.into_iter().map(|(k, v)| (k.into(), v)).collect();
-        match self.emit{
+        let new_emit: HashMap<IndexPair, Vec<usize>> =
+            fields.into_iter().map(|(k, v)| (k.into(), v)).collect();
+        match self.emit {
             Emit::AllFrom(p, sh) => println!("Emit all from: {:?} and sharding {:?}", p, sh),
-            Emit::Project { ref mut emit, ref mut emit_l, .. } => {
-                for (k, v)  in new_emit.into_iter() {
+            Emit::Project {
+                ref mut emit,
+                ref mut emit_l,
+                ..
+            } => {
+                for (k, v) in new_emit.into_iter() {
                     emit.insert(k, v.clone());
                     if k.has_local() {
                         emit_l.insert(*k, v);
                     } else {
                         self.unassigned.entry(k.as_global()).or_insert(v);
                     }
-                };
+                }
                 println!("New emit {:?}", emit_l.clone());
-            },
+            }
         }
         println!("End of add_parent_to_union {:?}", self.unassigned);
     }
@@ -148,7 +152,12 @@ impl Ingredient for Union {
     fn update_unassigned(&mut self, ip: IndexPair, pi: NodeIndex) {
         match self.emit {
             Emit::AllFrom(..) => println!("Emit all from"),
-            Emit::Project { ref mut emit, ref mut emit_l, ref mut cols, ref mut cols_l} => {
+            Emit::Project {
+                ref mut emit,
+                ref mut emit_l,
+                ref mut cols,
+                ref mut cols_l,
+            } => {
                 if ip.has_local() {
                     if self.unassigned.contains_key(&pi) {
                         let columns = self.unassigned.get(&pi).unwrap();
@@ -818,4 +827,3 @@ mod tests {
             .any(|&(n, c)| n == r.as_global() && c == 2));
     }
 }
-

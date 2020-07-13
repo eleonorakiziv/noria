@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use prelude::*;
 use ops::union::Emit;
+use prelude::*;
 
 /// Applies the identity operation to the view. Since the identity does nothing,
 /// it is the simplest possible operation. Primary intended as a reference
@@ -67,7 +67,6 @@ impl Ingredient for Identity {
     fn get_metadata(&self) -> Emit {
         unimplemented!();
     }
-
 }
 
 #[cfg(test)]

@@ -464,7 +464,6 @@ impl SqlIncorporator {
                 } else {
                     Ok(res.unwrap())
                 }
-
             })
             .collect();
 
@@ -478,7 +477,8 @@ impl SqlIncorporator {
         );
 
         let qfp = mir_query_to_flow_parts(&mut combined_mir_query, &mut mig, None);
-        self.compound_mir_queries.insert(query_name.to_owned(), combined_mir_query.clone());
+        self.compound_mir_queries
+            .insert(query_name.to_owned(), combined_mir_query.clone());
 
         self.register_query(query_name, None, &combined_mir_query, mig.universe());
 
@@ -573,7 +573,11 @@ impl SqlIncorporator {
         Ok((qfp, mir))
     }
 
-    pub(super) fn remove_query(&mut self, query_name: &str, mig: &Migration) -> Option<Vec<NodeIndex>> {
+    pub(super) fn remove_query(
+        &mut self,
+        query_name: &str,
+        mig: &Migration,
+    ) -> Option<Vec<NodeIndex>> {
         let nodeid = self
             .leaf_addresses
             .remove(query_name)
@@ -585,7 +589,7 @@ impl SqlIncorporator {
             self.view_schemas.remove(query_name).unwrap();
             // potentially would need to remove subqueries from named_queries
             self.mir_converter.remove_query(query_name, &mir_query);
-            return Some(vec![nodeid])
+            return Some(vec![nodeid]);
         }
 
         let qg_hash = self
@@ -681,9 +685,14 @@ impl SqlIncorporator {
             }
             None => {
                 if self.compound_mir_queries.contains_key(query_name) {
-                    debug!(self.log, "Dealing with a compound query {:?}", query_name.to_owned());
+                    debug!(
+                        self.log,
+                        "Dealing with a compound query {:?}",
+                        query_name.to_owned()
+                    );
                 } else {
-                    self.base_mir_queries.insert(query_name.to_owned(), mir.clone());
+                    self.base_mir_queries
+                        .insert(query_name.to_owned(), mir.clone());
                 }
             }
         }

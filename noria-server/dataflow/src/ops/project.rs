@@ -4,8 +4,8 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 
-use prelude::*;
 use ops::union::Emit;
+use prelude::*;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ProjectExpressionBase {

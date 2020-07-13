@@ -224,7 +224,7 @@ impl Ingredient for NodeOperator {
         impl_ingredient_fn_ref!(self, requires_full_materialization,)
     }
     fn get_metadata(&self) -> Emit {
-        impl_ingredient_fn_ref!(self, get_metadata, )
+        impl_ingredient_fn_ref!(self, get_metadata,)
     }
 }
 

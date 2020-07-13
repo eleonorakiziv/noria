@@ -11,7 +11,6 @@ pub mod concat;
 pub mod extremum;
 use ops::union::Emit;
 
-
 /// Trait for implementing operations that collapse a group of records into a single record.
 ///
 /// Implementors of this trait can be used as nodes in a `flow::FlowGraph` by wrapping them in a

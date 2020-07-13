@@ -136,8 +136,12 @@ impl<'a> Migration<'a> {
     ///
     /// Adds a parent to given node
     ///
-    pub fn add_parent(&mut self, parent: NodeIndex, child:NodeIndex, fields: Vec<usize>) -> NodeIndex
-    {
+    pub fn add_parent(
+        &mut self,
+        parent: NodeIndex,
+        child: NodeIndex,
+        fields: Vec<usize>,
+    ) -> NodeIndex {
         let child_ingredient = &mut self.mainline.ingredients[child];
 
         let mut hm = HashMap::new();
@@ -145,7 +149,10 @@ impl<'a> Migration<'a> {
         child_ingredient.add_parent_to_union(hm);
 
         // insert it into the graph
-        println!("Adding edge between parent {:?} and child {:?}", parent, child);
+        println!(
+            "Adding edge between parent {:?} and child {:?}",
+            parent, child
+        );
         self.mainline.ingredients.add_edge(parent, child, ());
         self.union_nodes.insert(child);
         child
@@ -457,7 +464,8 @@ impl<'a> Migration<'a> {
                     while (node.is_ingress() || node.is_egress()) && !stack.is_empty() {
                         pi = stack.pop().unwrap();
                         node = &mainline.ingredients[pi];
-                        &mainline.ingredients
+                        &mainline
+                            .ingredients
                             .neighbors_directed(pi, petgraph::EdgeDirection::Incoming)
                             .for_each(|ni| stack.push(ni));
                     }
@@ -465,10 +473,7 @@ impl<'a> Migration<'a> {
 
                 union_children
                     .into_iter()
-                    .for_each(|ci| {
-                        mainline.ingredients[ci].update_unassigned(ip, pi)
-                    });
-
+                    .for_each(|ci| mainline.ingredients[ci].update_unassigned(ip, pi));
             }
 
             // Initialize each new node
@@ -549,7 +554,6 @@ impl<'a> Migration<'a> {
                 (di, m)
             })
             .collect();
-
 
         // Boot up new domains (they'll ignore all updates for now)
         debug!(log, "booting new domains");

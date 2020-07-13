@@ -169,8 +169,7 @@ impl Node {
         Ingredient::description(&**self, detailed)
     }
 
-    pub fn add_parent_to_union(&mut self, fields: HashMap<NodeIndex, Vec<usize>>)
-    {
+    pub fn add_parent_to_union(&mut self, fields: HashMap<NodeIndex, Vec<usize>>) {
         if let NodeType::Internal(NodeOperator::Union(ref mut u)) = self.inner {
             u.add_parent_to_union(fields);
         } else {
@@ -178,8 +177,7 @@ impl Node {
         }
     }
 
-    pub fn update_unassigned(&mut self, ip: IndexPair, pi: NodeIndex)
-    {
+    pub fn update_unassigned(&mut self, ip: IndexPair, pi: NodeIndex) {
         if let NodeType::Internal(NodeOperator::Union(ref mut u)) = self.inner {
             u.update_unassigned(ip, pi);
         } else {
@@ -430,7 +428,7 @@ impl Node {
     }
 
     pub fn add_to(&mut self, domain: domain::Index) {
-       // assert_eq!(self.domain, None);
+        // assert_eq!(self.domain, None);
         assert!(!self.is_dropped());
         self.domain = Some(domain);
     }
@@ -438,7 +436,6 @@ impl Node {
     pub fn set_finalized_addr(&mut self, addr: IndexPair) {
         self.index = Some(addr);
     }
-
 }
 
 // is this or that?

@@ -1,12 +1,11 @@
+use chickenize::Chickenize;
+use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use noria::{Modification, Operation, TableOperation};
 use prelude::*;
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use vec_map::VecMap;
-use chickenize::Chickenize;
-use chrono::{NaiveDateTime, NaiveDate, NaiveTime};
-
 
 /// Base is used to represent the root nodes of the Noria data flow graph.
 ///
@@ -27,7 +26,6 @@ pub enum OnRemove {
     Clear,
     // Keep
 }
-
 
 impl Base {
     /// Create a non-durable base node operator.
@@ -163,10 +161,9 @@ impl Base {
                     if let TableOperation::Insert(mut r) = r {
                         self.fix(&mut r);
                         Record::Positive(r)
-                    } else if let TableOperation::Delete{key} = r {
+                    } else if let TableOperation::Delete { key } = r {
                         Record::Negative(key)
-                    }
-                    else {
+                    } else {
                         unreachable!("unkeyed base got non-insert operation {:?}", r);
                     }
                 })
@@ -325,23 +322,25 @@ impl Base {
                         if to_anonymize.contains(&c) {
                             if vec[c].is_integer() {
                                 vec[c] = 0.into();
-                            }
-                            else if vec[c].is_string() {
+                            } else if vec[c].is_string() {
                                 let curr: String = (&vec[c]).clone().into();
                                 vec[c] = curr.clone().chicken().into();
-                            }
-                            else if vec[c].is_datetime() {
-                                let default = NaiveDateTime::new(NaiveDate::from_ymd(1970, 1, 1), NaiveTime::from_hms_milli(0,0,0,0));
+                            } else if vec[c].is_datetime() {
+                                let default = NaiveDateTime::new(
+                                    NaiveDate::from_ymd(1970, 1, 1),
+                                    NaiveTime::from_hms_milli(0, 0, 0, 0),
+                                );
                                 vec[c] = DataType::Timestamp(default);
-                            }
-                            else {
-                                unimplemented!("only strings, integers and timestamps support anonymization");
+                            } else {
+                                unimplemented!(
+                                    "only strings, integers and timestamps support anonymization"
+                                );
                             }
                         }
                     }
                     positives.push(vec);
                 }
-            },
+            }
             _ => {}
         }
         let mut p_key: Vec<usize> = Vec::new();
@@ -356,13 +355,14 @@ impl Base {
                 // if there is no key, include all the cols
                 p_key = (0..row.rec().len()).collect();
             }
-            let keys_vec: Vec<DataType> = row.rec()
+            let keys_vec: Vec<DataType> = row
+                .rec()
                 .into_iter()
                 .enumerate()
                 .filter(|&(i, _)| p_key.contains(&i))
                 .map(|(_, v)| v.clone())
                 .collect();
-            neg_ops.push(TableOperation::Delete {key: keys_vec});
+            neg_ops.push(TableOperation::Delete { key: keys_vec });
         }
 
         let pos_ops: Vec<TableOperation> = positives

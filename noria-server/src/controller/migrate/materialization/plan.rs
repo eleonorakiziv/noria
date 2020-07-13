@@ -119,11 +119,17 @@ impl<'a> Plan<'a> {
         let mut tags = Vec::new();
         for path in self.paths(&index_on[..]) {
             let ni = path.last().unwrap().0;
-            if self.m.paths_ending_at.contains_key(&ni) && self.m.paths_ending_at.get(&ni).unwrap().contains(&path) {
+            if self.m.paths_ending_at.contains_key(&ni)
+                && self.m.paths_ending_at.get(&ni).unwrap().contains(&path)
+            {
                 println!("Encountered an existing path: {:?}", path);
-                continue
+                continue;
             }
-            self.m.paths_ending_at.entry(ni).or_insert(Vec::new()).push(path.clone());
+            self.m
+                .paths_ending_at
+                .entry(ni)
+                .or_insert(Vec::new())
+                .push(path.clone());
 
             let tag = self.m.next_tag();
             self.paths
@@ -438,9 +444,11 @@ impl<'a> Plan<'a> {
             true
         };
 
-
         if need_to_send {
-            println!("Sending PREPARESTATE to {:?}", self.graph[self.node].local_addr().clone());
+            println!(
+                "Sending PREPARESTATE to {:?}",
+                self.graph[self.node].local_addr().clone()
+            );
             self.domains
                 .get_mut(&self.graph[self.node].domain())
                 .unwrap()
@@ -454,10 +462,8 @@ impl<'a> Plan<'a> {
                 .unwrap();
         } else {
             // Ensures we don't send StartReplay in materialization/mod.rs
-            return Vec::new()
+            return Vec::new();
         }
-
-
 
         if !self.partial {
             // we know that this must be a *new* fully materialized node:

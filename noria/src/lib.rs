@@ -136,9 +136,9 @@ pub mod channel;
 #[doc(hidden)]
 pub mod consensus;
 #[doc(hidden)]
-pub mod internal;
-#[doc(hidden)]
 pub mod data;
+#[doc(hidden)]
+pub mod internal;
 
 pub use crate::consensus::ZookeeperAuthority;
 use crate::internal::*;
@@ -146,11 +146,11 @@ use std::cell::RefCell;
 
 /// The prelude contains most of the types needed in everyday operation.
 pub mod prelude {
+    pub use super::data::DataType;
     pub use super::ActivationResult;
     pub use super::ControllerHandle;
     pub use super::{SyncTable, Table};
     pub use super::{SyncView, View};
-    pub use super::data::{DataType};
 }
 
 /// Noria errors.

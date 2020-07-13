@@ -1,6 +1,6 @@
+use ops::union::Emit;
 use prelude::*;
 use std::collections::{HashMap, HashSet};
-use ops::union::Emit;
 
 /// A Rewrite data-flow operator.
 /// This node rewrites a column from a subset of records to a pre-determined value.

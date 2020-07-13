@@ -2,8 +2,8 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
 use ops;
-use prelude::*;
 use ops::union::Emit;
+use prelude::*;
 
 // TODO: make a Key type that is an ArrayVec<DataType>
 

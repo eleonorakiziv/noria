@@ -1,6 +1,7 @@
 use crate::controller::recipe::Recipe;
 use crate::controller::sql::SqlIncorporator;
 use crate::{Builder, Handle, SyncHandle};
+use dataflow::node::special::base::OnRemove;
 use dataflow::node::special::Base;
 use dataflow::ops::grouped::aggregate::Aggregation;
 use dataflow::ops::identity::Identity;
@@ -12,7 +13,6 @@ use dataflow::{DurabilityMode, PersistenceParameters};
 use futures::Future;
 use noria::consensus::{Authority, LocalAuthority};
 use noria::DataType;
-use dataflow::node::special::base::OnRemove;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -2538,9 +2538,13 @@ fn remove_compound_query() {
     let mut write = g.table("answers_a").unwrap().into_sync();
     let mut write2 = g.table("answers_b").unwrap().into_sync();
     // insert a new record
-    write.insert(vec![1.into(), 3.into(), "hello".into()]).unwrap();
-    write2.insert(vec![2.into(), 3.into(), "goodbye".into()]).unwrap();
-    
+    write
+        .insert(vec![1.into(), 3.into(), "hello".into()])
+        .unwrap();
+    write2
+        .insert(vec![2.into(), 3.into(), "goodbye".into()])
+        .unwrap();
+
     g.remove_query("answers").expect("failed to remove query");
     assert_eq!(g.outputs().unwrap().len(), 0);
 
@@ -2741,7 +2745,11 @@ mod parent_above_union {
     fn anonymize_on_remove() {
         let mut g = start_simple_partial("anonymize_on_remove");
         let a = g.migrate(|mig| {
-            let a = mig.add_base("a", &["name", "apikey", "color", "city"], Base::new_with_remove_option(OnRemove::Anonymize(vec![0, 3]))); //.with_key(vec![1])
+            let a = mig.add_base(
+                "a",
+                &["name", "apikey", "color", "city"],
+                Base::new_with_remove_option(OnRemove::Anonymize(vec![0, 3])),
+            ); //.with_key(vec![1])
             let b = mig.add_base("b", &["name", "apikey", "color", "city"], Base::default());
 
             let mut emits = HashMap::new();
@@ -2756,34 +2764,62 @@ mod parent_above_union {
         let mut muta = g.table("a").unwrap().into_sync();
         let mut mutb = g.table("b").unwrap().into_sync();
 
-        muta.insert(vec!["ekiziv".into(), 10.into(), "blue".into(), "maykop".into()]).unwrap();
-        mutb.insert(vec!["gmatute".into(), 11.into(), "blue".into(), "maykop".into()]).unwrap();
+        muta.insert(vec![
+            "ekiziv".into(),
+            10.into(),
+            "blue".into(),
+            "maykop".into(),
+        ])
+        .unwrap();
+        mutb.insert(vec![
+            "gmatute".into(),
+            11.into(),
+            "blue".into(),
+            "maykop".into(),
+        ])
+        .unwrap();
         sleep();
 
         g.remove_base(a).expect("failed to remove the base");
 
         let res = cq.lookup(&["blue".into()], true).unwrap();
         assert_eq!(res.len(), 2);
-        assert!(res.iter().any(|r| r == &vec!["chicken".into(), 10.into(), "blue".into(), "chicken".into()]));
-        assert!(res.iter().any(|r| r == &vec!["gmatute".into(), 11.into(), "blue".into(), "maykop".into()]));
+        assert!(res
+            .iter()
+            .any(|r| r == &vec!["chicken".into(), 10.into(), "blue".into(), "chicken".into()]));
+        assert!(res
+            .iter()
+            .any(|r| r == &vec!["gmatute".into(), 11.into(), "blue".into(), "maykop".into()]));
     }
 
     #[test]
     fn unsubscribe_then_lookup_with_bogokey() {
         let mut g = start_simple_partial("unsubscribe_then_lookup_with_bogokey");
         let c = g.migrate(|mig| {
-            let a = mig.add_base("a", &["email_key", "lec", "q", "answer"], Base::new_with_remove_option(OnRemove::Anonymize(vec![0])).with_key(vec![1, 2]));
+            let a = mig.add_base(
+                "a",
+                &["email_key", "lec", "q", "answer"],
+                Base::new_with_remove_option(OnRemove::Anonymize(vec![0])).with_key(vec![1, 2]),
+            );
 
             let mut emits = HashMap::new();
             emits.insert(a, vec![0, 1, 2, 3]);
             let u = Union::new(emits);
             let c = mig.add_ingredient("answers_union", &["email_key", "lec", "q", "answer"], u);
-            let answers_by_lec = mig.add_ingredient("answers_by_lec", &["email_key", "lec", "q", "answer"], Project::new(c, &[0, 1, 2, 3], None, None));
+            let answers_by_lec = mig.add_ingredient(
+                "answers_by_lec",
+                &["email_key", "lec", "q", "answer"],
+                Project::new(c, &[0, 1, 2, 3], None, None),
+            );
             mig.maintain_anonymous(answers_by_lec, &[1]);
             c
         });
         let b = g.migrate(move |mig| {
-            let b = mig.add_base("b", &["email_key", "lec", "q", "answer"], Base::new_with_remove_option(OnRemove::Anonymize(vec![0])).with_key(vec![1, 2]));
+            let b = mig.add_base(
+                "b",
+                &["email_key", "lec", "q", "answer"],
+                Base::new_with_remove_option(OnRemove::Anonymize(vec![0])).with_key(vec![1, 2]),
+            );
             mig.add_parent(b, c, vec![0, 1, 2, 3]);
             b
         });
@@ -2791,8 +2827,10 @@ mod parent_above_union {
         let mut muta = g.table("a").unwrap().into_sync();
         let mut mutb = g.table("b").unwrap().into_sync();
 
-        muta.insert(vec!["ekiziv".into(), 0.into(), 0.into(), "hello".into()]).unwrap();
-        mutb.insert(vec!["gmatute".into(), 0.into(), 0.into(), "maykop".into()]).unwrap();
+        muta.insert(vec!["ekiziv".into(), 0.into(), 0.into(), "hello".into()])
+            .unwrap();
+        mutb.insert(vec!["gmatute".into(), 0.into(), 0.into(), "maykop".into()])
+            .unwrap();
 
         g.remove_base(b).expect("failed to remove base");
 
@@ -2801,4 +2839,3 @@ mod parent_above_union {
         assert_eq!(res.len(), 2);
     }
 }
-

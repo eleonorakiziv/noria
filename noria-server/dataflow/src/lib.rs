@@ -31,13 +31,13 @@ extern crate serde;
 extern crate serde_derive;
 #[macro_use]
 extern crate slog;
+extern crate chickenize;
+extern crate chrono;
 extern crate stream_cancel;
 extern crate tempfile;
 extern crate timekeeper;
 extern crate tokio;
 extern crate vec_map;
-extern crate chickenize;
-extern crate chrono;
 
 crate mod backlog;
 pub mod node;

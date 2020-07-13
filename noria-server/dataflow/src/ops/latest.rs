@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use prelude::*;
 use ops::union::Emit;
+use prelude::*;
 
 /// Latest provides an operator that will maintain the last record for every group.
 ///

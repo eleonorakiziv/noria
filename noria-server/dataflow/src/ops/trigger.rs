@@ -1,6 +1,6 @@
+use ops::union::Emit;
 use prelude::*;
 use std::collections::HashMap;
-use ops::union::Emit;
 
 /// A Trigger data-flow operator.
 ///

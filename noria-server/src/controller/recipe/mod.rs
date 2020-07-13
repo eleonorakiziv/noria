@@ -473,13 +473,11 @@ impl Recipe {
                             }
                         }
                     }
-                    _ => {
-                        self
-                            .inc
-                            .as_mut()
-                            .unwrap()
-                            .remove_query(n.as_ref().unwrap(), mig)
-                    }
+                    _ => self
+                        .inc
+                        .as_mut()
+                        .unwrap()
+                        .remove_query(n.as_ref().unwrap(), mig),
                 }
             })
             .flatten()

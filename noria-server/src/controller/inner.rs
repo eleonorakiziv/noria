@@ -317,10 +317,7 @@ impl ControllerInner {
                 }),
             (Method::POST, "/remove_base") => json::from_slice(&body)
                 .map_err(|_| StatusCode::BAD_REQUEST)
-                .map(|args| {
-                    self.remove_base(args)
-                        .map(|r| json::to_string(&r).unwrap())
-                }),
+                .map(|args| self.remove_base(args).map(|r| json::to_string(&r).unwrap())),
             _ => Err(StatusCode::NOT_FOUND),
         }
     }
@@ -443,15 +440,17 @@ impl ControllerInner {
             .domains
             .get_mut(&parent.domain())
             .unwrap()
-            .send_to_healthy(box Packet::Message {
-                link: Link::new(parent.local_addr(), parent.local_addr()),
-                data: Default::default(),
-                tracer: None
-            }, &self.workers)
-        {
+            .send_to_healthy(
+                box Packet::Message {
+                    link: Link::new(parent.local_addr(), parent.local_addr()),
+                    data: Default::default(),
+                    tracer: None,
+                },
+                &self.workers,
+            ) {
             Ok(_) => {
                 println!("Everything is great");
-            },
+            }
             Err(e) => match e {
                 SendError::IoError(ref ioe) => {
                     if ioe.kind() == io::ErrorKind::BrokenPipe
@@ -729,7 +728,7 @@ impl ControllerInner {
             context,
             start: time::Instant::now(),
             log: miglog,
-            union_nodes:Default::default(),
+            union_nodes: Default::default(),
         };
         let r = f(&mut m);
         m.commit();
@@ -752,7 +751,7 @@ impl ControllerInner {
             context: Default::default(),
             start: time::Instant::now(),
             log: miglog,
-            union_nodes:Default::default(),
+            union_nodes: Default::default(),
         };
         let r = f(&mut m);
         m.commit();
@@ -1427,27 +1426,28 @@ impl ControllerInner {
         &mut self,
         authority: &Arc<A>,
         qname: &str,
-    )  -> Result<(), String> {
+    ) -> Result<(), String> {
         let old = self.recipe.clone();
         self.recipe.remove_query(qname);
         let updated = self.recipe.clone();
         let replaced = old.replace(updated).unwrap();
 
-        self.apply_recipe(replaced).expect("failed to apply recipe in remove_query");
+        self.apply_recipe(replaced)
+            .expect("failed to apply recipe in remove_query");
         if authority
             .read_modify_write(STATE_KEY, |state: Option<ControllerState>| match state {
                 None => unreachable!(),
                 Some(ref state) if state.epoch > self.epoch => Err(()),
                 Some(mut state) => {
                     state.recipe_version = self.recipe.version();
-                   // state.recipes.push(updated_recipe.clone());
+                    // state.recipes.push(updated_recipe.clone());
                     Ok(state)
                 }
             })
             .is_err()
-            {
+        {
             return Err("Failed to persist recipe extension".to_owned());
-            }
+        }
         Ok(())
     }
 }
