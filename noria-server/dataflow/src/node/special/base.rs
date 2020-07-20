@@ -50,7 +50,7 @@ impl Base {
     }
 
     // Creates o prolongs a lease for this base table
-    pub fn set_lease(mut self, ttl_std: time::Duration) -> Self {
+    pub fn set_lease(&mut self, ttl_std: time::Duration) {
         let curr = chrono::Local::now().naive_local();
         let ttl = Duration::from_std(ttl_std).unwrap();
         match self.expires_at {
@@ -63,7 +63,6 @@ impl Base {
                 self.expires_at = t.checked_add_signed(ttl);
             }
         }
-        self
     }
 
     pub fn key(&self) -> Option<&[usize]> {
@@ -117,7 +116,6 @@ impl Base {
     }
 
     pub fn is_expired(&self) -> bool {
-        println!("Checking if {:?} it is expired!", self);
         match self.expires_at {
             Some(t) => {
                 let curr = chrono::Local::now().naive_local();

@@ -160,15 +160,12 @@ pub(super) fn main<A: Authority + 'static>(
                     crate::block_on(move || c.join().unwrap());
                     let drx = drx.take().unwrap();
                     controller = Some(ControllerInner::new(log.clone(), state.clone(), drx));
-                    // let mut ctrl = &mut controller.unwrap();
-                    // tokio::spawn(check_lease_expiration(ctrl));
                 }
 
                 Event::CampaignError(e) => {
                     panic!("{:?}", e);
                 }
                 Event::CheckLeases => {
-                    println!("Check leases!");
                     if let Some(ref mut ctrl) = controller {
                         crate::block_on(|| ctrl.handle_leases().unwrap());
                     }
@@ -312,34 +309,3 @@ fn instance_campaign<A: Authority + 'static>(
         })
         .unwrap()
 }
-
-// fn check_lease_expiration(ctrl: &mut Graph) -> impl Future<Item = (), Error = ()> {
-//     let check_tables = |ctrl: &mut ControllerInner| -> Result<(), failure::Error> {
-//         let expired_nodes: Vec<NodeIndex> = ctrl
-//             .ingredients
-//             .node_indices()
-//             .map(|index| ctrl.ingredients[index])
-//             .filter(|&n| n.is_base())
-//             .filter(|n| n.is_expired())
-//             .map(|n| n.global_addr())
-//             .collect();
-//         for expired in expired_nodes {
-//             ctrl.remove_base(expired)
-//                 .map_err(|e| format_err!("failed to remove a base"));
-//         }
-//         Ok(())
-//     };
-//     use futures::future;
-//     let task = tokio::timer::Interval::new(Instant::now(), Duration::from_millis(100))
-//         .take(10)
-//         .for_each(|instant| {
-//             println!("fire; instant={:?}", instant); // check tables here
-//             Ok(())
-//         })
-//         .map_err(|e| {
-//             panic!("interval errored; err={:?}", e);
-//         });
-
-//     tokio::run(task);
-//     future::ok(()) // listen_domain_replies does not have to do this!
-// }

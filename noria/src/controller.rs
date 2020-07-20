@@ -1,4 +1,5 @@
 use crate::consensus::{self, Authority};
+use crate::data::Lease;
 use crate::debug::stats;
 use crate::table::{Table, TableBuilder, TableRpc};
 use crate::view::{View, ViewBuilder, ViewRpc};
@@ -467,6 +468,39 @@ impl<A: Authority + 'static> ControllerHandle<A> {
         self.rpc("remove_base", ni, "failed to remove base")
     }
 
+    ///
+    /// Creates or renews a lease for a shard
+    ///
+    pub fn set_shard_lease(
+        &mut self,
+        shard_name: &'static str,
+        nodes: Vec<NodeIndex>,
+        ttl: Duration,
+    ) -> impl Future<Item = (), Error = failure::Error> + Send {
+        let shard_lease = Lease {
+            name: Some(shard_name),
+            nodes,
+            ttl,
+        };
+        self.rpc("set_lease", shard_lease, "failed to set shard lease")
+    }
+
+    ///
+    /// Creates or renews a lease for a table
+    ///
+    pub fn set_table_lease(
+        &mut self,
+        node: NodeIndex,
+        ttl: Duration,
+    ) -> impl Future<Item = (), Error = failure::Error> + Send {
+        let lease = Lease {
+            name: None,
+            nodes: vec![node],
+            ttl,
+        };
+        self.rpc("set_lease", lease, "failed to set table lease")
+    }
+
     /// Construct a synchronous interface to this controller instance using the given executor to
     /// execute all operations.
     ///
@@ -668,6 +702,31 @@ where
     /// See [`ControllerHandle::remove_base`].
     pub fn remove_base(&mut self, ni: NodeIndex) -> Result<(), failure::Error> {
         let fut = self.handle()?.remove_base(ni);
+        self.run(fut)
+    }
+
+    ///
+    /// Creates or renews a lease for a shard
+    ///
+    pub fn set_shard_lease(
+        &mut self,
+        shard_name: &'static str,
+        nodes: Vec<NodeIndex>,
+        ttl: Duration,
+    ) -> Result<(), failure::Error> {
+        let fut = self.handle()?.set_shard_lease(shard_name, nodes, ttl);
+        self.run(fut)
+    }
+
+    ///
+    /// Creates or renews a lease for a shard
+    ///
+    pub fn set_table_lease(
+        &mut self,
+        node: NodeIndex,
+        ttl: Duration,
+    ) -> Result<(), failure::Error> {
+        let fut = self.handle()?.set_table_lease(node, ttl);
         self.run(fut)
     }
 }
