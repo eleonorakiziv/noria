@@ -9,6 +9,7 @@ use dataflow::ops::join::JoinSource::*;
 use dataflow::ops::join::{Join, JoinSource, JoinType};
 use dataflow::ops::project::Project;
 use dataflow::ops::union::Union;
+use dataflow::prelude::NodeIndex;
 use dataflow::{DurabilityMode, PersistenceParameters};
 use futures::Future;
 use noria::consensus::{Authority, LocalAuthority};
@@ -44,6 +45,26 @@ pub fn start_simple_partial(prefix: &str) -> SyncHandle<LocalAuthority> {
     builder.set_sharding(None);
     builder.set_persistence(get_persistence_params(prefix));
     builder.start_simple().unwrap()
+}
+
+// Builds a local worker with the given log prefix and creates a global table
+// with the name, fields and primary index specified. A table is named
+// "<name>_table", a user's view is named "<name>_view".
+pub fn start_with_global_table(
+    prefix: &str,
+    name: &'static str,
+    fields: &'static [&'static str],
+    primary_index: Vec<usize>,
+) -> SyncHandle<LocalAuthority> {
+    use crate::logger_pls;
+    let mut builder = Builder::default();
+    builder.log_with(logger_pls());
+    builder.set_sharding(None);
+    builder.disable_partial();
+    builder.set_persistence(get_persistence_params(prefix));
+    builder
+        .start_simple_with_global_table(name, fields, primary_index)
+        .unwrap()
 }
 
 fn wrap_sync<A, F>(fut: F) -> SyncHandle<A>
@@ -2842,19 +2863,116 @@ mod parent_above_union {
 
 #[test]
 // Creates two bases, one with a lease.
-fn test_leases() {
-    let mut g = start_simple_partial("test_leases");
+fn test_shard_lease_expires() {
+    let mut g = start_with_global_table("test_leases", "shards", &["name", "node_index"], vec![1]);
+
     let (a, b) = g.migrate(|mig| {
         let a = mig.add_base(
-            "a",
+            "userinfo_alice",
             &["name", "apikey", "color", "city"],
-            Base::default().set_lease(Duration::from_millis(10000)),
+            Base::default(),
         );
-        let b = mig.add_base("b", &["name", "apikey", "color", "city"], Base::default());
+        let b = mig.add_base("answers_alice", &["lec", "q", "answer"], Base::default());
         (a, b)
     });
-    println!("inputs: {:?}", g.inputs());
-    assert_eq!(g.inputs().unwrap().len(), 2);
-    thread::sleep(Duration::from_millis(10000));
+    g.set_shard_lease("alice", vec![a, b], Duration::from_millis(5000))
+        .expect("failed to create shard lease");
+    assert_eq!(g.inputs().unwrap().len(), 3);
+    thread::sleep(Duration::from_millis(6000));
     assert_eq!(g.inputs().unwrap().len(), 1);
+}
+
+#[test]
+// Creates two bases, one with a lease.
+fn test_shard_renew_lease() {
+    let global_table_name = "shards";
+
+    let mut g = start_with_global_table(
+        "test_leases",
+        global_table_name.clone(),
+        &["name", "node_index"],
+        vec![1],
+    );
+
+    let (a, b) = g.migrate(|mig| {
+        let a = mig.add_base(
+            "userinfo_alice",
+            &["name", "apikey", "color", "city"],
+            Base::default(),
+        );
+        let b = mig.add_base("answers_alice", &["lec", "q", "answer"], Base::default());
+        (a, b)
+    });
+    let shard_name = "alice";
+
+    g.set_shard_lease(shard_name, vec![a, b], Duration::from_millis(5000))
+        .expect("failed to create shard lease");
+    assert_eq!(g.inputs().unwrap().len(), 3);
+    thread::sleep(Duration::from_millis(4000));
+
+    // get all the nodes corresponding to alice shard
+    let mut shards_view = g
+        .view(format!("{}_view", global_table_name))
+        .unwrap()
+        .into_sync();
+    let res = shards_view.lookup(&[shard_name.into()], true).unwrap();
+
+    let nodes: Vec<NodeIndex> = res
+        .into_iter()
+        .map(|r| r[1].clone().into())
+        .map(|i: u64| NodeIndex::from(i as u32))
+        .collect();
+    g.set_shard_lease("alice", nodes, Duration::from_millis(5000))
+        .expect("failed to create shard lease");
+    thread::sleep(Duration::from_millis(1000));
+    assert_eq!(g.inputs().unwrap().len(), 3);
+    println!("{:?}", g.inputs());
+}
+
+#[test]
+// Creates two bases, one with a lease.
+fn test_table_lease_expires() {
+    let mut g = start_with_global_table("test_leases", "shards", &["name", "node_index"], vec![1]);
+
+    let (a, b) = g.migrate(|mig| {
+        let a = mig.add_base(
+            "userinfo_alice",
+            &["name", "apikey", "color", "city"],
+            Base::default(),
+        );
+        let b = mig.add_base("answers_alice", &["lec", "q", "answer"], Base::default());
+        (a, b)
+    });
+    assert_eq!(g.inputs().unwrap().len(), 3);
+    g.set_table_lease(a, Duration::from_millis(5000))
+        .expect("failed to create table lease");
+    g.set_table_lease(b, Duration::from_millis(1000))
+        .expect("failed to create table lease");
+    thread::sleep(Duration::from_millis(2000));
+    assert_eq!(g.inputs().unwrap().len(), 2);
+}
+
+#[test]
+// Creates two bases, one with a lease.
+fn test_renew_table_lease() {
+    let mut g = start_with_global_table("test_leases", "shards", &["name", "node_index"], vec![1]);
+
+    let (a, b) = g.migrate(|mig| {
+        let a = mig.add_base(
+            "userinfo_alice",
+            &["name", "apikey", "color", "city"],
+            Base::default(),
+        );
+        let b = mig.add_base("answers_alice", &["lec", "q", "answer"], Base::default());
+        (a, b)
+    });
+    assert_eq!(g.inputs().unwrap().len(), 3);
+    g.set_table_lease(a, Duration::from_millis(5000))
+        .expect("failed to create table lease");
+    g.set_table_lease(b, Duration::from_millis(1000))
+        .expect("failed to create table lease");
+    thread::sleep(Duration::from_millis(500));
+    g.set_table_lease(b, Duration::from_millis(1000))
+        .expect("failed to create table lease");
+    assert_eq!(g.inputs().unwrap().len(), 3);
 }

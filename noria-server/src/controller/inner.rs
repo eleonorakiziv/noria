@@ -13,8 +13,10 @@ use nom_sql::ColumnSpecification;
 use noria::builders::*;
 use noria::channel::tcp::{SendError, TcpSender};
 use noria::consensus::{Authority, Epoch, STATE_KEY};
+use noria::data::Lease;
 use noria::debug::stats::{DomainStats, GraphStats, NodeStats};
-use noria::ActivationResult;
+use noria::prelude::SyncView;
+use noria::{ActivationResult, SyncTable, Modification};
 use petgraph::visit::Bfs;
 use slog::Logger;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -70,6 +72,8 @@ pub(super) struct ControllerInner {
     log: slog::Logger,
 
     pub(in crate::controller) replies: DomainReplies,
+    pub global_table: Option<SyncTable>,
+    pub global_view: Option<SyncView>,
 }
 
 pub(in crate::controller) struct DomainReplies(
@@ -318,6 +322,9 @@ impl ControllerInner {
             (Method::POST, "/remove_base") => json::from_slice(&body)
                 .map_err(|_| StatusCode::BAD_REQUEST)
                 .map(|args| self.remove_base(args).map(|r| json::to_string(&r).unwrap())),
+            (Method::POST, "/set_lease") => json::from_slice(&body)
+                .map_err(|_| StatusCode::BAD_REQUEST)
+                .map(|args| self.set_lease(args).map(|r| json::to_string(&r).unwrap())),
             _ => Err(StatusCode::NOT_FOUND),
         }
     }
@@ -433,19 +440,53 @@ impl ControllerInner {
         Ok(())
     }
 
-    pub(super) fn handle_leases(&mut self) -> Result<(), io::Error> {
-        let indices = self.ingredients.node_indices();
-        let expired_nodes: Vec<NodeIndex> = indices
+    pub(super) fn handle_leases(&mut self) -> Result<(), String> {
+        if self.global_view.is_none() {
+            info!(self.log, "global view does not exist");
+            return Ok(());
+        }
+        let view = self.global_view.as_mut().unwrap();
+        let rows = view.lookup(&[0.into()], true).unwrap();
+
+        let expired: Vec<NodeIndex> = rows
             .into_iter()
-            .map(|index| &self.ingredients[index])
-            .filter(|n| n.is_base())
-            .filter(|n| n.is_expired())
+            .map(|r| r[1].clone().into())
+            .map(|i: u64| NodeIndex::from(i as u32))
+            .map(|ni| &self.ingredients[ni])
+            .filter(|&n| n.is_base() && n.is_expired())
             .map(|n| n.global_addr())
             .collect();
+        for ex in expired.into_iter() {
+            self.remove_base(ex).expect("failed to remove the node");
+            let key: DataType = ex.index().into();
+            self.global_table
+                .as_mut()
+                .unwrap()
+                .delete(vec![key])
+                .expect("failed to delete an expired row from global table");
+        }
+        Ok(())
+    }
 
-        for expired in expired_nodes {
-            self.remove_base(expired)
-                .expect("failed to remove the node");
+    pub fn set_lease(&mut self, lease: Lease) -> Result<(), String> {
+        if self.global_table.is_none() {
+            return Err("failed to find global table".to_string());
+        }
+        let table = self.global_table.as_mut().unwrap();
+        let ttl = lease.ttl;
+
+        let shard_name = match lease.name {
+            Some(name) => name,
+            None => "",
+        };
+        for ni in lease.nodes.into_iter() {
+            let node = &mut self.ingredients[ni];
+            if node.is_base() {
+                node.set_lease(ttl);
+                table
+                    .insert_or_update(vec![shard_name.into(), ni.index().into()], vec![])
+                    .expect("failed to insert into global table");
+            }
         }
         Ok(())
     }
@@ -465,9 +506,7 @@ impl ControllerInner {
                 },
                 &self.workers,
             ) {
-            Ok(_) => {
-                println!("Everything is great");
-            }
+            Ok(_) => (),
             Err(e) => match e {
                 SendError::IoError(ref ioe) => {
                     if ioe.kind() == io::ErrorKind::BrokenPipe
@@ -546,6 +585,8 @@ impl ControllerInner {
             last_checked_workers: Instant::now(),
 
             replies: DomainReplies(drx),
+            global_table: None,
+            global_view: None,
         }
     }
 

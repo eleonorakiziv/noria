@@ -11,6 +11,13 @@ use std::ops::{Add, Div, Mul, Sub};
 const FLOAT_PRECISION: f64 = 1_000_000_000.0;
 const TINYTEXT_WIDTH: usize = 15;
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Lease<'a> {
+    pub name: Option<&'a str>, // None implies that it is one table
+    pub nodes: Vec<NodeIndex>,
+    pub ttl: Duration,
+}
+
 /// The main type used for user data throughout the codebase.
 ///
 /// Having this be an enum allows for our code to be agnostic about the types of user data except
@@ -382,7 +389,10 @@ impl From<Literal> for DataType {
     }
 }
 
+use petgraph::prelude::NodeIndex;
 use std::borrow::Cow;
+use std::time::Duration;
+
 impl<'a> Into<Cow<'a, str>> for &'a DataType {
     fn into(self) -> Cow<'a, str> {
         match *self {

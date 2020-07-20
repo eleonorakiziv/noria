@@ -200,10 +200,7 @@ fn check_lease_expiration(
     ));
     tokio::spawn(
         timer
-            .for_each(move |_| {
-                println!("Sending a CheckLease event");
-                send_check_lease(&snd).map_err(|e| panic!("{:?}", e))
-            })
+            .for_each(move |_| send_check_lease(&snd).map_err(|e| panic!("{:?}", e)))
             .map_err(|e| panic!("{:?}", e)),
     );
     future::ok(())

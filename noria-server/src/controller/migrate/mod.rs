@@ -23,9 +23,11 @@
 use crate::controller::ControllerInner;
 use dataflow::prelude::*;
 use dataflow::{node, prelude::Packet};
+use noria::prelude::SyncView;
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
+use noria::SyncTable;
 use petgraph;
 use slog;
 
@@ -302,6 +304,14 @@ impl<'a> Migration<'a> {
         self.mainline.ingredients[ri]
             .with_reader_mut(|r| r.set_key(key))
             .unwrap();
+    }
+
+    ///
+    /// Set the table handle for the global table
+    ///
+    pub fn set_global_table_handles(&mut self, table_handle: SyncTable, view_handle: SyncView) {
+        self.mainline.global_table = Some(table_handle);
+        self.mainline.global_view = Some(view_handle);
     }
 
     /// Commit the changes introduced by this `Migration` to the master `Soup`.

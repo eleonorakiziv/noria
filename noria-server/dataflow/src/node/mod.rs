@@ -16,7 +16,8 @@ mod ntype;
 pub use self::ntype::NodeType; // crate viz for tests
 
 mod debug;
-use ops::union::Emit; // for union
+use ops::union::Emit;
+use std::time::Duration;
 
 // NOTE(jfrg): the migration code should probably move into the dataflow crate...
 // it is the reason why so much stuff here is pub
@@ -529,6 +530,13 @@ impl Node {
     pub fn is_expired(&self) -> bool {
         if let NodeType::Base(b) = &self.inner {
             b.is_expired()
+        } else {
+            unimplemented!("only bases implement lease functionality");
+        }
+    }
+    pub fn set_lease(&mut self, ttl: Duration) {
+        if let NodeType::Base(ref mut b) = self.inner {
+            b.set_lease(ttl);
         } else {
             unimplemented!("only bases implement lease functionality");
         }
