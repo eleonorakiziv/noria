@@ -51,6 +51,8 @@ crate trait State: SizeOf + Send {
     fn evict_keys(&mut self, tag: Tag, keys: &[Vec<DataType>]) -> Option<(&[usize], u64)>;
 
     fn clear(&mut self);
+
+    fn swap_primary_and_secondary(&mut self);
 }
 
 #[derive(Clone, Debug)]

@@ -1,6 +1,8 @@
 use fnv::FnvHashMap;
 use node::NodeType;
+use noria::data::TableOperation;
 use payload;
+use payload::MessagePurpose;
 use prelude::*;
 use std::collections::{HashSet, VecDeque};
 use std::mem;
@@ -57,18 +59,39 @@ impl Node {
                             link: Link::new(dst, dst),
                             data: rs,
                             tracer,
+                            purpose: MessagePurpose::Other,
                         }));
                     }
-                    Some(box Packet::Message { link, tracer, .. }) => {
-                        let (negatives, positives) = b.notify_leave(addr, &*state);
-
+                    Some(box Packet::Message {
+                        link,
+                        tracer,
+                        data,
+                        purpose,
+                    }) => {
+                        let (mut negatives, mut positives) = (Vec::default(), Vec::default());
+                        if purpose == (MessagePurpose::Unsubscribe) {
+                            let (a, b) = b.unsubscribe(addr, &*state, self.fields.len());
+                            negatives = a;
+                            positives = b;
+                        } else if purpose == (MessagePurpose::Subscribe) {
+                            let (a, b) = b.subscribe(data, addr, &*state);
+                            negatives = a;
+                            positives = b;
+                        }
                         let mut neg_rs = b.process(addr, negatives.clone(), &*state);
-                        if keyed_by.is_none() {
+                        if keyed_by.is_none() && !neg_rs.is_empty() {
                             materialize(&mut neg_rs, None, state.get_mut(addr));
+                        }
+                        if purpose == MessagePurpose::Unsubscribe && b.resub_keys.is_some() {
+                            b.change_primary_to_resub_keys();
+                            state.get_mut(addr).unwrap().swap_primary_and_secondary();
+                        } else if purpose == MessagePurpose::Subscribe && b.resub_keys.is_some() {
+                            b.change_resub_to_primary_keys();
+                            state.get_mut(addr).unwrap().swap_primary_and_secondary();
                         }
 
                         let mut pos_rs = b.process(addr, positives, &*state);
-                        if keyed_by.is_none() {
+                        if keyed_by.is_none() && !pos_rs.is_empty() {
                             materialize(&mut pos_rs, None, state.get_mut(addr));
                         }
 
@@ -79,6 +102,7 @@ impl Node {
                             link,
                             data: rs.into(),
                             tracer,
+                            purpose: MessagePurpose::Other,
                         }));
                     }
                     Some(ref p) => {

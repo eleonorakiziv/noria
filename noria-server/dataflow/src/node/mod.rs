@@ -24,11 +24,11 @@ use std::time::Duration;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Node {
-    name: String,
+    pub name: String,
     index: Option<IndexPair>,
     domain: Option<domain::Index>,
 
-    fields: Vec<String>,
+    pub fields: Vec<String>,
     parents: Vec<LocalNodeIndex>,
     children: Vec<LocalNodeIndex>,
     inner: NodeType,
@@ -322,6 +322,12 @@ impl Node {
         match self.inner {
             NodeType::Internal(ref i) => i.suggest_indexes(n),
             NodeType::Base(ref b) => b.suggest_indexes(n),
+            _ => HashMap::new(),
+        }
+    }
+    pub fn suggest_secondary_indexes(&self, n: NodeIndex) -> HashMap<NodeIndex, Vec<usize>> {
+        match self.inner {
+            NodeType::Base(ref b) => b.suggest_secondary_indexes(n),
             _ => HashMap::new(),
         }
     }

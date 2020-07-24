@@ -211,6 +211,13 @@ impl State for PersistentState {
     fn clear(&mut self) {
         unreachable!("can't clear PersistentState")
     }
+
+    fn swap_primary_and_secondary(&mut self) {
+        if self.indices.len() <= 1 {
+            return;
+        }
+        self.indices.swap(0, 1);
+    }
 }
 
 impl PersistentState {

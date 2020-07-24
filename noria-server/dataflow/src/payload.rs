@@ -80,6 +80,13 @@ pub struct SourceChannelIdentifier {
     pub tag: u32,
 }
 
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
+pub enum MessagePurpose {
+    Unsubscribe, // removes or anonymizes base's contents
+    Subscribe,
+    Other,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[allow(clippy::large_enum_variant)]
 pub enum Packet {
@@ -98,6 +105,7 @@ pub enum Packet {
         link: Link,
         data: Records,
         tracer: Tracer,
+        purpose: MessagePurpose,
     },
 
     /// Update that is part of a tagged data-flow replay path.
@@ -348,10 +356,12 @@ impl Packet {
                 link,
                 ref data,
                 ref tracer,
+                ref purpose,
             } => Packet::Message {
                 link,
                 data: data.clone(),
                 tracer: tracer.clone(),
+                purpose: purpose.clone(),
             },
             Packet::ReplayPiece {
                 link,

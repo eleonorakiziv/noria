@@ -1,7 +1,6 @@
 use crate::controller::recipe::Recipe;
 use crate::controller::sql::SqlIncorporator;
 use crate::{Builder, Handle, SyncHandle};
-use dataflow::node::special::base::OnRemove;
 use dataflow::node::special::Base;
 use dataflow::ops::grouped::aggregate::Aggregation;
 use dataflow::ops::identity::Identity;
@@ -2769,8 +2768,8 @@ mod parent_above_union {
             let a = mig.add_base(
                 "a",
                 &["name", "apikey", "color", "city"],
-                Base::new_with_remove_option(OnRemove::Anonymize(vec![0, 3])),
-            ); //.with_key(vec![1])
+                Base::default().anonymize_with_resub_key(vec![1, 2]),
+            );
             let b = mig.add_base("b", &["name", "apikey", "color", "city"], Base::default());
 
             let mut emits = HashMap::new();
@@ -2820,7 +2819,9 @@ mod parent_above_union {
             let a = mig.add_base(
                 "a",
                 &["email_key", "lec", "q", "answer"],
-                Base::new_with_remove_option(OnRemove::Anonymize(vec![0])).with_key(vec![1, 2]),
+                Base::default()
+                    .with_key(vec![1, 2])
+                    .anonymize_with_resub_key(vec![3]),
             );
 
             let mut emits = HashMap::new();
@@ -2839,7 +2840,9 @@ mod parent_above_union {
             let b = mig.add_base(
                 "b",
                 &["email_key", "lec", "q", "answer"],
-                Base::new_with_remove_option(OnRemove::Anonymize(vec![0])).with_key(vec![1, 2]),
+                Base::default()
+                    .anonymize_with_resub_key(vec![1, 2, 3])
+                    .with_key(vec![1, 2]),
             );
             mig.add_parent(b, c, vec![0, 1, 2, 3]);
             b
@@ -2975,4 +2978,191 @@ fn test_renew_table_lease() {
     g.set_table_lease(b, Duration::from_millis(1000))
         .expect("failed to create table lease");
     assert_eq!(g.inputs().unwrap().len(), 3);
+}
+
+#[test]
+// Creates two bases, one with a lease.
+fn test_getting_user_data() {
+    let mut g = start_with_global_table("test_leases", "shards", &["name", "node_index"], vec![1]);
+    let (a, b) = g.migrate(|mig| {
+        let a = mig.add_base(
+            "userinfo_alice",
+            &["name", "apikey", "color", "city"],
+            Base::default(),
+        );
+        let b = mig.add_base("answers_alice", &["lec", "q", "answer"], Base::default());
+        (a, b)
+    });
+    let mut muta = g.table("userinfo_alice").unwrap().into_sync();
+    muta.insert(vec![
+        "alice".into(),
+        65.into(),
+        "blue".into(),
+        "maykop".into(),
+    ])
+    .expect("failed to insert");
+    let mut mutb = g.table("answers_alice").unwrap().into_sync();
+    mutb.insert(vec![0.into(), 1.into(), "hello".into()])
+        .expect("failed to insert");
+    mutb.insert(vec![1.into(), 0.into(), "hey".into()])
+        .expect("failed to insert");
+
+    let actual_data = g.get_data(vec![a, b]).expect("failed to receive my data");
+    let expect_data = "{\"t\":[{\"name\":\"userinfo_alice\",\"fields\":[\"name\",\"apikey\",\"color\",\"city\"],\"ni\":6,\"primary_key\":[],\"rows\":[[{\"TinyText\":[97,108,105,99,101,0,0,0,0,0,0,0,0,0,0]},{\"Int\":65},{\"TinyText\":[98,108,117,101,0,0,0,0,0,0,0,0,0,0,0]},{\"TinyText\":[109,97,121,107,111,112,0,0,0,0,0,0,0,0,0]}]]},
+    {\"name\":\"answers_alice\",\"fields\":[\"lec\",\"q\",\"answer\"],\"ni\":7,\"primary_key\":[],\"rows\":[[{\"Int\":0},{\"Int\":1},{\"TinyText\":[104,101,108,108,111,0,0,0,0,0,0,0,0,0,0]}],[{\"Int\":1},{\"Int\":0},{\"TinyText\":[104,101,121,0,0,0,0,0,0,0,0,0,0,0,0]}]]}]}";
+    assert_eq!(actual_data, expect_data);
+}
+
+#[test]
+fn test_simple_importing_user_data() {
+    let mut g = start_with_global_table("test_leases", "shards", &["name", "node_index"], vec![1]);
+    let (a, b) = g.migrate(|mig| {
+        let a = mig.add_base(
+            "userinfo_alice",
+            &["name", "apikey", "color", "city"],
+            Base::default().with_key(vec![1]),
+        );
+        let a_view = mig.add_ingredient(
+            "userinfo_view",
+            &["name", "apikey", "color", "city"],
+            Project::new(a, &[0, 1, 2, 3], Some(vec![0.into()]), None),
+        );
+        let b = mig.add_base(
+            "answers_alice",
+            &["lec", "q", "answer"],
+            Base::default().with_key(vec![0, 1]),
+        );
+        let b_view = mig.add_ingredient(
+            "answers_view",
+            &["lec", "q", "answer"],
+            Project::new(b, &[0, 1, 2], Some(vec![0.into()]), None),
+        );
+        mig.maintain_anonymous(a_view, &[4]);
+        mig.maintain_anonymous(b_view, &[3]);
+        (a, b)
+    });
+    let mut muta = g.table("userinfo_alice").unwrap().into_sync();
+    muta.insert(vec![
+        "alice".into(),
+        65.into(),
+        "blue".into(),
+        "maykop".into(),
+    ])
+    .expect("failed to insert");
+    let mut mutb = g.table("answers_alice").unwrap().into_sync();
+    mutb.insert(vec![0.into(), 1.into(), "hello".into()])
+        .expect("failed to insert");
+    mutb.insert(vec![1.into(), 0.into(), "hey".into()])
+        .expect("failed to insert");
+
+    let user_data = g.get_data(vec![a, b]).expect("failed to recieve my data");
+    g.remove_base(a).expect("failed to remove userinfo");
+    g.remove_base(b).expect("failed to remove answers");
+    sleep();
+
+    g.import_data(user_data.to_string())
+        .expect("failed to import the data");
+    sleep();
+    let mut info = g.view("userinfo_view").unwrap().into_sync();
+    let mut answers = g.view("answers_view").unwrap().into_sync();
+
+    let info_res = info.lookup(&[0.into()], true).unwrap();
+    let answers_res = answers.lookup(&[0.into()], true).unwrap();
+
+    assert_eq!(info_res.len(), 1);
+    assert!(info_res.iter().any(|r| r
+        == &vec![
+            "alice".into(),
+            65.into(),
+            "blue".into(),
+            "maykop".into(),
+            0.into()
+        ]));
+    assert_eq!(answers_res.len(), 2);
+    assert!(answers_res
+        .iter()
+        .any(|r| r == &vec![0.into(), 1.into(), "hello".into(), 0.into()]));
+    assert!(answers_res
+        .iter()
+        .any(|r| r == &vec![1.into(), 0.into(), "hey".into(), 0.into()]));
+}
+
+#[test]
+fn test_import_and_anonymize() {
+    let mut g = start_with_global_table("test_leases", "shards", &["name", "node_index"], vec![1]);
+    let (a, b) = g.migrate(|mig| {
+        let a = mig.add_base(
+            "userinfo_alice",
+            &["name", "apikey", "color", "city"],
+            Base::default()
+                .anonymize_with_resub_key(vec![1])
+                .with_key(vec![1]),
+        );
+        let a_view = mig.add_ingredient(
+            "userinfo_view",
+            &["name", "apikey", "color", "city"],
+            Project::new(a, &[0, 1, 2, 3], Some(vec![0.into()]), None),
+        );
+        let b = mig.add_base(
+            "answers_alice",
+            &["lec", "q", "answer"],
+            Base::default()
+                .anonymize_with_resub_key(vec![2])
+                .with_key(vec![0, 1]),
+        );
+        let b_view = mig.add_ingredient(
+            "answers_view",
+            &["lec", "q", "answer"],
+            Project::new(b, &[0, 1, 2], Some(vec![0.into()]), None),
+        );
+        mig.maintain_anonymous(a_view, &[4]);
+        mig.maintain_anonymous(b_view, &[3]);
+        (a, b)
+    });
+    let mut muta = g.table("userinfo_alice").unwrap().into_sync();
+    muta.insert(vec![
+        "alice".into(),
+        65.into(),
+        "blue".into(),
+        "maykop".into(),
+    ])
+    .expect("failed to insert");
+    let mut mutb = g.table("answers_alice").unwrap().into_sync();
+    mutb.insert(vec![0.into(), 1.into(), "hello".into()])
+        .expect("failed to insert");
+    mutb.insert(vec![1.into(), 0.into(), "hey".into()])
+        .expect("failed to insert");
+
+    let user_data = g.get_data(vec![a, b]).expect("failed to recieve my data");
+    g.remove_base(a).expect("failed to remove userinfo");
+    g.remove_base(b).expect("failed to remove answers");
+    sleep();
+
+    g.import_data(user_data.to_string())
+        .expect("failed to import the data");
+    sleep();
+    let mut info = g.view("userinfo_view").unwrap().into_sync();
+    let mut answers = g.view("answers_view").unwrap().into_sync();
+
+    let info_res = info.lookup(&[0.into()], true).unwrap();
+    let answers_res = answers.lookup(&[0.into()], true).unwrap();
+
+    assert_eq!(info_res.len(), 1);
+    assert!(info_res.iter().any(|r| r
+        == &vec![
+            "alice".into(),
+            65.into(),
+            "blue".into(),
+            "maykop".into(),
+            0.into()
+        ]));
+
+    assert_eq!(answers_res.len(), 2);
+
+    assert!(answers_res
+        .iter()
+        .any(|r| r == &vec![0.into(), 1.into(), "hello".into(), 0.into()]));
+    assert!(answers_res
+        .iter()
+        .any(|r| r == &vec![1.into(), 0.into(), "hey".into(), 0.into()]));
 }

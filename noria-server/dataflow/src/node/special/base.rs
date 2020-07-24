@@ -3,6 +3,7 @@ use chrono::{Duration, NaiveDate, NaiveDateTime, NaiveTime};
 use noria::{Modification, Operation, TableOperation};
 use prelude::*;
 use std::borrow::Cow;
+use std::cmp;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::time;
@@ -19,14 +20,9 @@ pub struct Base {
     defaults: Vec<DataType>,
     dropped: Vec<usize>,
     unmodified: bool,
-    on_remove: OnRemove,
     expires_at: Option<NaiveDateTime>,
-}
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum OnRemove {
-    Anonymize(Vec<usize>),
-    Clear,
-    // Keep
+    pub resub_keys: Option<Vec<usize>>, // if not empty, then the base table should be anonymized
+    temp: Option<Vec<usize>>,           // to store primary indexes on unsubscription
 }
 
 impl Base {
@@ -37,10 +33,9 @@ impl Base {
         base
     }
 
-    pub fn new_with_remove_option(on_remove: OnRemove) -> Self {
-        let mut base = Base::default();
-        base.on_remove = on_remove;
-        base
+    pub fn anonymize_with_resub_key(mut self, resub_key: Vec<usize>) -> Base {
+        self.resub_keys = Some(resub_key);
+        self
     }
 
     /// Builder with a known primary key.
@@ -129,6 +124,19 @@ impl Base {
             None => false,
         }
     }
+    pub fn change_primary_to_resub_keys(&mut self) {
+        if self.primary_key.is_some() {
+            self.temp = Some(self.primary_key.as_ref().unwrap().clone());
+        }
+        self.primary_key = Some(self.resub_keys.as_ref().unwrap().clone());
+    }
+    pub fn change_resub_to_primary_keys(&mut self) {
+        if self.temp.is_none() {
+            println!("base.temp is None");
+            self.primary_key = None;
+        }
+        self.primary_key = Some(self.temp.as_ref().unwrap().clone());
+    }
 }
 
 /// A Base clone must have a different unique_id so that no two copies write to the same file.
@@ -138,12 +146,12 @@ impl Clone for Base {
     fn clone(&self) -> Base {
         Base {
             primary_key: self.primary_key.clone(),
-
             defaults: self.defaults.clone(),
             dropped: self.dropped.clone(),
             unmodified: self.unmodified.clone(),
-            on_remove: self.on_remove.clone(),
             expires_at: self.expires_at.clone(),
+            resub_keys: self.resub_keys.clone(),
+            temp: self.temp.clone(),
         }
     }
 }
@@ -152,12 +160,12 @@ impl Default for Base {
     fn default() -> Self {
         Base {
             primary_key: None,
-
             defaults: Vec::new(),
             dropped: Vec::new(),
             unmodified: true,
-            on_remove: OnRemove::Clear,
             expires_at: None,
+            resub_keys: None,
+            temp: None,
         }
     }
 }
@@ -257,7 +265,7 @@ impl Base {
                     if let Some(ref was) = was {
                         eprintln!("base ignoring {:?} since it already has {:?}", row, was);
                     } else {
-                        //assert!(was.is_none());
+                        assert!(was.is_none());
                         current = Some(Cow::Owned(row));
                     }
                     continue;
@@ -323,6 +331,19 @@ impl Base {
         results.into()
     }
 
+    pub(in crate::node) fn suggest_secondary_indexes(
+        &self,
+        n: NodeIndex,
+    ) -> HashMap<NodeIndex, Vec<usize>> {
+        if self.resub_keys.is_some() {
+            Some((n, self.resub_keys.as_ref().unwrap().clone()))
+                .into_iter()
+                .collect()
+        } else {
+            HashMap::new()
+        }
+    }
+
     pub(in crate::node) fn suggest_indexes(&self, n: NodeIndex) -> HashMap<NodeIndex, Vec<usize>> {
         if self.primary_key.is_some() {
             Some((n, self.primary_key.as_ref().unwrap().clone()))
@@ -332,15 +353,16 @@ impl Base {
             HashMap::new()
         }
     }
-    pub(in crate::node) fn notify_leave(
+    pub(in crate::node) fn unsubscribe(
         &mut self,
         us: LocalNodeIndex,
         state: &StateMap,
+        fields_len: usize,
     ) -> (Vec<TableOperation>, Vec<TableOperation>) {
         let db = state
             .get(us)
             .expect("base with primary key must be materialized");
-        let mut negatives: Vec<Record> = db
+        let negatives: Vec<Record> = db
             .cloned_records()
             .into_iter()
             .map(|row| Record::Negative(row))
@@ -348,13 +370,16 @@ impl Base {
 
         let mut positives = Vec::new();
 
-        match &self.on_remove {
-            OnRemove::Anonymize(to_anonymize) => {
+        match &self.resub_keys {
+            Some(resub_keys) => {
+                let mut to_anon: Vec<usize> = (0..fields_len).collect();
+                to_anon.retain(|x| !resub_keys.contains(&x));
+
                 for row in negatives.clone().into_iter() {
                     let (mut vec, _pos) = row.extract();
 
                     for c in 0..vec.len() {
-                        if to_anonymize.contains(&c) {
+                        if to_anon.contains(&c) {
                             if vec[c].is_integer() {
                                 vec[c] = 0.into();
                             } else if vec[c].is_string() {
@@ -378,12 +403,81 @@ impl Base {
             }
             _ => {}
         }
+
+        let neg_ops = self.return_keys_for_delete_operation(negatives);
+
+        let pos_ops: Vec<TableOperation> = positives
+            .into_iter()
+            .map(|r| TableOperation::Insert(r.to_vec()))
+            .collect();
+        (neg_ops, pos_ops)
+    }
+
+    // Returns table operations corresponding to (negative, positive) records.
+    pub(in crate::node) fn subscribe(
+        &mut self,
+        data: Records,
+        us: LocalNodeIndex,
+        state: &StateMap,
+    ) -> (Vec<TableOperation>, Vec<TableOperation>) {
+        let positives = data
+            .clone()
+            .into_iter()
+            .map(|rec| TableOperation::Insert(rec.to_vec()))
+            .collect();
+        let mut negatives = Vec::default();
+        if self.resub_keys.is_none() {
+            return (negatives, positives);
+        }
+        let key_cols = self.resub_keys.as_ref().unwrap();
+        let db = state
+            .get(us)
+            .expect("base with primary key must be materialized");
+
+        let record_vec: Vec<Record> = data.into();
+        let new: Vec<Vec<DataType>> = record_vec.into_iter().map(|rec| rec.rec().into()).collect();
+        // HashMap: row_core to count
+        let mut imported: HashMap<Vec<DataType>, usize> = HashMap::default();
+        new.into_iter()
+            .map(|row| {
+                let key = row
+                    .clone()
+                    .into_iter()
+                    .enumerate()
+                    .filter(|&(i, _)| key_cols.contains(&i))
+                    .map(|(_, val)| val)
+                    .collect();
+
+                (key)
+            })
+            .for_each(|k| *imported.entry(k).or_insert(0) += 1);
+
+        let get_current_row_number = |current_key: &'_ _| -> usize {
+            match db.lookup(key_cols, &KeyType::from(current_key)) {
+                LookupResult::Some(rows) => rows.len(),
+                LookupResult::Missing => unreachable!(),
+            }
+        };
+
+        for (row_core, count) in imported.into_iter() {
+            let curr_row_count = get_current_row_number(&row_core);
+            let neg_row_count = cmp::min(count, curr_row_count);
+            for _ in 0..neg_row_count {
+                negatives.push(TableOperation::Delete {
+                    key: row_core.clone(),
+                });
+            }
+        }
+
+        (negatives, positives)
+    }
+
+    fn return_keys_for_delete_operation(&self, mut negatives: Vec<Record>) -> Vec<TableOperation> {
         let mut p_key: Vec<usize> = Vec::new();
         match &self.primary_key {
             Some(k) => p_key = (*k).clone(),
             None => {}
         }
-
         let mut neg_ops: Vec<TableOperation> = Vec::new();
         for row in negatives.iter_mut() {
             if p_key.is_empty() {
@@ -399,12 +493,7 @@ impl Base {
                 .collect();
             neg_ops.push(TableOperation::Delete { key: keys_vec });
         }
-
-        let pos_ops: Vec<TableOperation> = positives
-            .into_iter()
-            .map(|r| TableOperation::Insert(r.to_vec()))
-            .collect();
-        (neg_ops, pos_ops)
+        neg_ops
     }
 }
 

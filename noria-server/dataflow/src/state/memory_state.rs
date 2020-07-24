@@ -174,6 +174,9 @@ impl State for MemoryState {
         }
         self.mem_size = 0;
     }
+    fn swap_primary_and_secondary(&mut self) {
+        unimplemented!("for memory state");
+    }
 }
 
 impl MemoryState {

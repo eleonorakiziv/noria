@@ -5,6 +5,8 @@ use crate::controller::schema;
 use crate::controller::{ControllerState, Migration, Recipe};
 use crate::controller::{Worker, WorkerIdentifier};
 use crate::coordination::{CoordinationMessage, CoordinationPayload, DomainDescriptor};
+use dataflow::ops::project::Project;
+use dataflow::payload::MessagePurpose;
 use dataflow::prelude::*;
 use dataflow::{node, payload::ControlReplyPacket, prelude::Packet, DomainBuilder, DomainConfig};
 use hyper::{self, Method, StatusCode};
@@ -16,7 +18,7 @@ use noria::consensus::{Authority, Epoch, STATE_KEY};
 use noria::data::Lease;
 use noria::debug::stats::{DomainStats, GraphStats, NodeStats};
 use noria::prelude::SyncView;
-use noria::{ActivationResult, SyncTable, Modification};
+use noria::{ActivationResult, SyncTable};
 use petgraph::visit::Bfs;
 use slog::Logger;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -74,6 +76,21 @@ pub(super) struct ControllerInner {
     pub(in crate::controller) replies: DomainReplies,
     pub global_table: Option<SyncTable>,
     pub global_view: Option<SyncView>,
+}
+
+/// Table struct is used to serialize/deserialize table information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Table {
+    name: String,
+    fields: Vec<String>,
+    ni: NodeIndex,
+    primary_key: Option<Vec<usize>>,
+    rows: Option<Vec<Vec<DataType>>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Tables {
+    t: Vec<Table>,
 }
 
 pub(in crate::controller) struct DomainReplies(
@@ -325,6 +342,12 @@ impl ControllerInner {
             (Method::POST, "/set_lease") => json::from_slice(&body)
                 .map_err(|_| StatusCode::BAD_REQUEST)
                 .map(|args| self.set_lease(args).map(|r| json::to_string(&r).unwrap())),
+            (Method::POST, "/get_data") => json::from_slice(&body)
+                .map_err(|_| StatusCode::BAD_REQUEST)
+                .map(|args| self.get_data(args).map(|r| json::to_string(&r).unwrap())),
+            (Method::POST, "/import_data") => json::from_slice(&body)
+                .map_err(|_| StatusCode::BAD_REQUEST)
+                .map(|args| self.import_data(args).map(|r| json::to_string(&r).unwrap())),
             _ => Err(StatusCode::NOT_FOUND),
         }
     }
@@ -491,9 +514,8 @@ impl ControllerInner {
         Ok(())
     }
 
-    pub fn send_negative_records(&mut self, ni: NodeIndex) {
+    pub fn send_records(&mut self, ni: NodeIndex, data: Records, purpose: MessagePurpose) {
         let parent = &mut self.ingredients[ni.clone()];
-        println!("Sending negative records to all children");
         match self
             .domains
             .get_mut(&parent.domain())
@@ -501,8 +523,9 @@ impl ControllerInner {
             .send_to_healthy(
                 box Packet::Message {
                     link: Link::new(parent.local_addr(), parent.local_addr()),
-                    data: Default::default(),
+                    data,
                     tracer: None,
+                    purpose,
                 },
                 &self.workers,
             ) {
@@ -1268,7 +1291,7 @@ impl ControllerInner {
 
     pub fn remove_base(&mut self, node: NodeIndex) -> Result<(), String> {
         assert!(self.ingredients[node].is_base());
-        self.send_negative_records(node);
+        self.send_records(node, Default::default(), MessagePurpose::Unsubscribe);
         self.ingredients[node].remove();
         Ok(())
     }
@@ -1505,6 +1528,93 @@ impl ControllerInner {
             .is_err()
         {
             return Err("Failed to persist recipe extension".to_owned());
+        }
+        Ok(())
+    }
+
+    fn get_data(&mut self, tables: Vec<NodeIndex>) -> Result<String, String> {
+        // verify that tableids are corresponding to the shard name
+
+        let mut metadata: Vec<Table> = Vec::new();
+        for ni in tables.into_iter() {
+            let node = &self.ingredients[ni];
+            if !node.is_base() {
+                continue;
+            }
+
+            let key = node.get_base().unwrap().key();
+            let primary_key = if key.is_none() {
+                vec![]
+            } else {
+                key.unwrap().to_vec()
+            };
+
+            metadata.push(Table {
+                name: node.name.clone(),
+                ni,
+                fields: node.fields.clone(),
+                rows: None,
+                primary_key: Some(primary_key),
+            });
+        }
+
+        let view_nis = self.migrate(|mig| {
+            let mut nis = HashMap::new();
+            for table in metadata.clone().into_iter() {
+                let view_name = format!("{}_lookup", table.name);
+                let fields: Vec<usize> = (0..table.fields.len()).collect();
+                let new_view = mig.add_ingredient(
+                    &view_name,
+                    &table.fields,
+                    Project::new(table.ni, &fields, Some(vec![0.into()]), None),
+                );
+                mig.maintain_anonymous(new_view, &[table.fields.len()]);
+                nis.entry(table.name).or_insert_with(|| new_view);
+            }
+            nis
+        });
+        let mut ts = Vec::new();
+        let mut json_string = "".to_string();
+        for mut table in metadata.into_iter() {
+            let view = format!("{}_lookup", table.name);
+            let x = Arc::new(Mutex::new(HashMap::new()));
+            let vb = self.view_builder(&view);
+            let view = vb.map(|vb| vb.build(x.clone()).wait().unwrap()).unwrap();
+            let res = view.lookup(&[0.into()], true).wait().unwrap().1;
+            let rows: Vec<Vec<_>> = res
+                .into_iter()
+                .map(|mut r| {
+                    // eliminate bogokeys from each response
+                    r.pop(); // safe to pop here, since we always insert an additional column
+                    r
+                })
+                .collect();
+            table.rows = Some(rows);
+
+            // delete the newly created view
+            if view_nis.contains_key(&table.name) {
+                let &view_ni = view_nis.get(&table.name).unwrap();
+                self.remove_leaf(view_ni)
+                    .expect("failed to remove the view");
+            }
+            ts.push(table);
+        }
+
+        // add to result
+        let tables = Tables { t: ts };
+        let json = serde_json::to_string(&tables).unwrap();
+        json_string.push_str(&json);
+        Ok(json_string)
+    }
+
+    fn import_data(&mut self, serialized: String) -> Result<(), String> {
+        println!("Calling to import the data");
+        let tables: Tables = serde_json::from_str(&serialized).unwrap();
+        println!("tables: {:?}", tables);
+        for table in tables.t.into_iter() {
+            // find the table with the same name
+            let data: Records = table.rows.unwrap().into();
+            self.send_records(table.ni, data, MessagePurpose::Subscribe);
         }
         Ok(())
     }

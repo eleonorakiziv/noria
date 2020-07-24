@@ -501,6 +501,26 @@ impl<A: Authority + 'static> ControllerHandle<A> {
         self.rpc("set_lease", lease, "failed to set table lease")
     }
 
+    ///
+    /// Requests the data in the specified tables
+    ///
+    pub fn get_data(
+        &mut self,
+        tables: Vec<NodeIndex>,
+    ) -> impl Future<Item = String, Error = failure::Error> + Send {
+        self.rpc("get_data", tables, "failed to get the data for tables")
+    }
+
+    ///
+    /// Imports the user data from the JSON string
+    ///
+    pub fn import_data(
+        &mut self,
+        data: String,
+    ) -> impl Future<Item = (), Error = failure::Error> + Send {
+        self.rpc("import_data", data, "failed to import the data")
+    }
+
     /// Construct a synchronous interface to this controller instance using the given executor to
     /// execute all operations.
     ///
@@ -727,6 +747,22 @@ where
         ttl: Duration,
     ) -> Result<(), failure::Error> {
         let fut = self.handle()?.set_table_lease(node, ttl);
+        self.run(fut)
+    }
+
+    ///
+    /// Requests the data in the specified tables
+    ///
+    pub fn get_data(&mut self, tables: Vec<NodeIndex>) -> Result<String, failure::Error> {
+        let fut = self.handle()?.get_data(tables);
+        self.run(fut)
+    }
+
+    ///
+    /// Imports the data from the JSON string
+    ///
+    pub fn import_data(&mut self, data: String) -> Result<(), failure::Error> {
+        let fut = self.handle()?.import_data(data);
         self.run(fut)
     }
 }
