@@ -500,7 +500,6 @@ impl<A: Authority + 'static> ControllerHandle<A> {
         };
         self.rpc("set_lease", lease, "failed to set table lease")
     }
-
     ///
     /// Requests the data in the specified tables
     ///
@@ -520,7 +519,6 @@ impl<A: Authority + 'static> ControllerHandle<A> {
     ) -> impl Future<Item = (), Error = failure::Error> + Send {
         self.rpc("import_data", data, "failed to import the data")
     }
-
     /// Construct a synchronous interface to this controller instance using the given executor to
     /// execute all operations.
     ///
