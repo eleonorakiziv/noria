@@ -6,6 +6,7 @@ use dataflow::node::special::Base;
 use dataflow::ops::project::Project;
 use dataflow::PersistenceParameters;
 use failure;
+use noria::consensus::ZookeeperAuthority;
 use noria::consensus::{Authority, LocalAuthority};
 use slog;
 use std::net::IpAddr;
@@ -197,5 +198,48 @@ impl Builder {
             mig.set_global_table_handles(table_handle, view_handle);
         });
         Ok(sh)
+    }
+
+    ///
+    /// Same as start simple, but creates a global table with name, fields and
+    /// primary index specified
+    ///
+    pub fn create_global_table(
+        &mut self,
+        sh: &mut SyncHandle<ZookeeperAuthority>,
+        name: &'static str,
+        fields: &'static [&'static str],
+        primary_index: Vec<usize>,
+    ) -> Result<(), failure::Error> {
+        let view_emit: Vec<usize> = (0..fields.len()).collect();
+        sh.migrate(move |mig| {
+            let table = mig.add_base(
+                format!("{}_table", name.clone()),
+                fields,
+                Base::default().with_key(primary_index),
+            );
+            let controller_view = mig.add_ingredient(
+                "controller_view",
+                fields,
+                Project::new(table, &view_emit, Some(vec![0.into()]), None),
+            );
+            let user_view = mig.add_ingredient(
+                format!("{}_view", name.clone()),
+                fields,
+                Project::new(table, &view_emit, None, None),
+            );
+            mig.maintain_anonymous(controller_view, &[2]);
+            mig.maintain_anonymous(user_view, &[0]);
+        });
+
+        let table_handle = sh
+            .table(&format!("{}_table", name.clone()))
+            .unwrap()
+            .into_sync();
+        let view_handle = sh.view("controller_view").unwrap().into_sync();
+        sh.migrate(move |mig| {
+            mig.set_global_table_handles(table_handle, view_handle);
+        });
+        Ok(())
     }
 }

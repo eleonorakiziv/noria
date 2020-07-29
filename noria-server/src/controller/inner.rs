@@ -501,7 +501,12 @@ impl ControllerInner {
             Some(name) => name,
             None => "",
         };
-        for ni in lease.nodes.into_iter() {
+        let nodes: Vec<NodeIndex> = lease
+            .nodes
+            .into_iter()
+            .map(|i: u32| NodeIndex::from(i))
+            .collect();
+        for ni in nodes.into_iter() {
             let node = &mut self.ingredients[ni];
             if node.is_base() {
                 node.set_lease(ttl);

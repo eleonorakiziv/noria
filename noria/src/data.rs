@@ -14,7 +14,7 @@ const TINYTEXT_WIDTH: usize = 15;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Lease<'a> {
     pub name: Option<&'a str>, // None implies that it is one table
-    pub nodes: Vec<NodeIndex>,
+    pub nodes: Vec<u32>,
     pub ttl: Duration,
 }
 

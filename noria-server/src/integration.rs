@@ -2878,8 +2878,12 @@ fn test_shard_lease_expires() {
         let b = mig.add_base("answers_alice", &["lec", "q", "answer"], Base::default());
         (a, b)
     });
-    g.set_shard_lease("alice", vec![a, b], Duration::from_millis(5000))
-        .expect("failed to create shard lease");
+    g.set_shard_lease(
+        "alice".to_string(),
+        vec![(a.index() as u32), (b.index() as u32)],
+        Duration::from_millis(5000),
+    )
+    .expect("failed to create shard lease");
     assert_eq!(g.inputs().unwrap().len(), 3);
     thread::sleep(Duration::from_millis(6000));
     assert_eq!(g.inputs().unwrap().len(), 1);
@@ -2908,8 +2912,12 @@ fn test_shard_renew_lease() {
     });
     let shard_name = "alice";
 
-    g.set_shard_lease(shard_name, vec![a, b], Duration::from_millis(5000))
-        .expect("failed to create shard lease");
+    g.set_shard_lease(
+        shard_name.to_string(),
+        vec![(a.index() as u32), (b.index() as u32)],
+        Duration::from_millis(5000),
+    )
+    .expect("failed to create shard lease");
     assert_eq!(g.inputs().unwrap().len(), 3);
     thread::sleep(Duration::from_millis(4000));
 
@@ -2920,12 +2928,12 @@ fn test_shard_renew_lease() {
         .into_sync();
     let res = shards_view.lookup(&[shard_name.into()], true).unwrap();
 
-    let nodes: Vec<NodeIndex> = res
+    let nodes: Vec<u32> = res
         .into_iter()
         .map(|r| r[1].clone().into())
-        .map(|i: u64| NodeIndex::from(i as u32))
+        .map(|i: u64| (i as u32))
         .collect();
-    g.set_shard_lease("alice", nodes, Duration::from_millis(5000))
+    g.set_shard_lease("alice".to_string(), nodes, Duration::from_millis(5000))
         .expect("failed to create shard lease");
     thread::sleep(Duration::from_millis(1000));
     assert_eq!(g.inputs().unwrap().len(), 3);
@@ -2947,9 +2955,9 @@ fn test_table_lease_expires() {
         (a, b)
     });
     assert_eq!(g.inputs().unwrap().len(), 3);
-    g.set_table_lease(a, Duration::from_millis(5000))
+    g.set_table_lease(a.index() as u32, Duration::from_millis(5000))
         .expect("failed to create table lease");
-    g.set_table_lease(b, Duration::from_millis(1000))
+    g.set_table_lease(b.index() as u32, Duration::from_millis(1000))
         .expect("failed to create table lease");
     thread::sleep(Duration::from_millis(2000));
     assert_eq!(g.inputs().unwrap().len(), 2);
@@ -2970,12 +2978,12 @@ fn test_renew_table_lease() {
         (a, b)
     });
     assert_eq!(g.inputs().unwrap().len(), 3);
-    g.set_table_lease(a, Duration::from_millis(5000))
+    g.set_table_lease(a.index() as u32, Duration::from_millis(5000))
         .expect("failed to create table lease");
-    g.set_table_lease(b, Duration::from_millis(1000))
+    g.set_table_lease(b.index() as u32, Duration::from_millis(1000))
         .expect("failed to create table lease");
     thread::sleep(Duration::from_millis(500));
-    g.set_table_lease(b, Duration::from_millis(1000))
+    g.set_table_lease(b.index() as u32, Duration::from_millis(1000))
         .expect("failed to create table lease");
     assert_eq!(g.inputs().unwrap().len(), 3);
 }

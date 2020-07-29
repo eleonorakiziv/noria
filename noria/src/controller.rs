@@ -471,12 +471,12 @@ impl<A: Authority + 'static> ControllerHandle<A> {
     ///
     pub fn set_shard_lease(
         &mut self,
-        shard_name: &'static str,
-        nodes: Vec<NodeIndex>,
+        shard_name: String,
+        nodes: Vec<u32>,
         ttl: Duration,
     ) -> impl Future<Item = (), Error = failure::Error> + Send {
         let shard_lease = Lease {
-            name: Some(shard_name),
+            name: Some(&shard_name),
             nodes,
             ttl,
         };
@@ -488,7 +488,7 @@ impl<A: Authority + 'static> ControllerHandle<A> {
     ///
     pub fn set_table_lease(
         &mut self,
-        node: NodeIndex,
+        node: u32,
         ttl: Duration,
     ) -> impl Future<Item = (), Error = failure::Error> + Send {
         let lease = Lease {
@@ -726,8 +726,8 @@ where
     ///
     pub fn set_shard_lease(
         &mut self,
-        shard_name: &'static str,
-        nodes: Vec<NodeIndex>,
+        shard_name: String,
+        nodes: Vec<u32>,
         ttl: Duration,
     ) -> Result<(), failure::Error> {
         let fut = self.handle()?.set_shard_lease(shard_name, nodes, ttl);
@@ -737,11 +737,7 @@ where
     ///
     /// Creates or renews a lease for a shard
     ///
-    pub fn set_table_lease(
-        &mut self,
-        node: NodeIndex,
-        ttl: Duration,
-    ) -> Result<(), failure::Error> {
+    pub fn set_table_lease(&mut self, node: u32, ttl: Duration) -> Result<(), failure::Error> {
         let fut = self.handle()?.set_table_lease(node, ttl);
         self.run(fut)
     }

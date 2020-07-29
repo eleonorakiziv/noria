@@ -196,7 +196,7 @@ fn check_lease_expiration(
 
     let timer = valve.wrap(tokio::timer::Interval::new(
         Instant::now(),
-        Duration::from_millis(1000),
+        Duration::from_millis(100),
     ));
     tokio::spawn(
         timer
