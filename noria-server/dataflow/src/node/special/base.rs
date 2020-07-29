@@ -380,7 +380,7 @@ impl Base {
 
                     for c in 0..vec.len() {
                         if to_anon.contains(&c) {
-                            if vec[c].is_integer() {
+                            if vec[c].is_integer() || vec[c].is_unsigned_integer() {
                                 vec[c] = 0.into();
                             } else if vec[c].is_string() {
                                 let curr: String = (&vec[c]).clone().into();

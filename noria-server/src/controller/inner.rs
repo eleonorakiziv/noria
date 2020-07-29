@@ -465,7 +465,6 @@ impl ControllerInner {
 
     pub(super) fn handle_leases(&mut self) -> Result<(), String> {
         if self.global_view.is_none() {
-            info!(self.log, "global view does not exist");
             return Ok(());
         }
         let view = self.global_view.as_mut().unwrap();

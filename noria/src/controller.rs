@@ -302,8 +302,7 @@ impl<A: Authority + 'static> ControllerHandle<A> {
         // getting false positives, then it is safe to increase the allowed hit count, however, the
         // limit_mutator_creation test in src/controller/handle.rs should then be updated as well.
         #[cfg(debug_assertions)]
-        assert_infrequent::at_most(400);
-
+        // assert_infrequent::at_most(400);
         let views = self.views.clone();
         let name = name.to_string();
         self.handle
@@ -334,8 +333,7 @@ impl<A: Authority + 'static> ControllerHandle<A> {
         // This call attempts to detect if this function is being called in a loop. If this
         // is getting false positives, then it is safe to increase the allowed hit count.
         #[cfg(debug_assertions)]
-        assert_infrequent::at_most(400);
-
+        // assert_infrequent::at_most(400);
         let domains = self.domains.clone();
         let name = name.to_string();
         self.handle

@@ -150,6 +150,13 @@ impl DataType {
             _ => false,
         }
     }
+
+    pub fn is_unsigned_integer(&self) -> bool {
+        match *self {
+            DataType::UnsignedInt(_) | DataType::UnsignedBigInt(_) => true,
+            _ => false,
+        }
+    }
 }
 
 impl PartialEq for DataType {
