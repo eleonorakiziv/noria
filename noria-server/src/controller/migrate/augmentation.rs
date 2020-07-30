@@ -63,10 +63,6 @@ pub(super) fn inform(
                 .map(|u| (u.local_addr(), u.get_metadata().clone()))
                 .collect();
 
-            println!(
-                "INFORM node: {:?}, parents: {:?}, metadata: {:?}",
-                node, old_parents, metadata
-            );
             debug!(log, "request addition of node"; "node" => ni.index());
             ctx.send_to_healthy(
                 box Packet::AddNode {

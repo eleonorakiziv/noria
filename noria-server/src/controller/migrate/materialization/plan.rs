@@ -122,7 +122,6 @@ impl<'a> Plan<'a> {
             if self.m.paths_ending_at.contains_key(&ni)
                 && self.m.paths_ending_at.get(&ni).unwrap().contains(&path)
             {
-                println!("Encountered an existing path: {:?}", path);
                 continue;
             }
             self.m
@@ -445,10 +444,6 @@ impl<'a> Plan<'a> {
         };
 
         if need_to_send {
-            println!(
-                "Sending PREPARESTATE to {:?}",
-                self.graph[self.node].local_addr().clone()
-            );
             self.domains
                 .get_mut(&self.graph[self.node].domain())
                 .unwrap()

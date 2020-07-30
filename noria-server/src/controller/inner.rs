@@ -1614,7 +1614,6 @@ impl ControllerInner {
     fn import_data(&mut self, serialized: String) -> Result<(), String> {
         println!("Calling to import the data");
         let tables: Tables = serde_json::from_str(&serialized).unwrap();
-        println!("tables: {:?}", tables);
         for table in tables.t.into_iter() {
             // find the table with the same name
             let data: Records = table.rows.unwrap().into();

@@ -151,10 +151,6 @@ impl<'a> Migration<'a> {
         child_ingredient.add_parent_to_union(hm);
 
         // insert it into the graph
-        println!(
-            "Adding edge between parent {:?} and child {:?}",
-            parent, child
-        );
         self.mainline.ingredients.add_edge(parent, child, ());
         self.union_nodes.insert(child);
         child
@@ -448,7 +444,6 @@ impl<'a> Migration<'a> {
 
                 let mut ip: IndexPair = ni.into();
                 ip.set_local(unsafe { LocalNodeIndex::make(nnodes as u32) });
-                println!("Set local of {:?} to {:?}", ni, *ip);
                 mainline.ingredients[ni].set_finalized_addr(ip);
                 mainline
                     .remap

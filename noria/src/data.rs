@@ -462,6 +462,7 @@ impl Into<u64> for DataType {
         match self {
             DataType::UnsignedBigInt(s) => s,
             DataType::UnsignedInt(s) => u64::from(s),
+            DataType::Int(s) => s as u64,
             _ => unreachable!(),
         }
     }

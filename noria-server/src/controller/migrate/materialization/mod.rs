@@ -205,7 +205,6 @@ impl Materializations {
             // include resub_key indices, if any
             if n.is_base() {
                 let keys = n.suggest_secondary_indexes(ni);
-                println!("Secondary indices suggested: {:?}", keys.clone());
                 keys.into_iter().filter(|(_, resub_keys)| !resub_keys.is_empty()).for_each(|(ni, resub_keys)| {
                     lookup_obligations.entry(ni).or_insert_with(HashSet::new).insert(resub_keys);
                 });

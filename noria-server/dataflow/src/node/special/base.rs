@@ -115,7 +115,6 @@ impl Base {
             Some(t) => {
                 let curr = chrono::Local::now().naive_local();
                 if curr >= t {
-                    println!("Expired!");
                     true
                 } else {
                     false
@@ -132,7 +131,6 @@ impl Base {
     }
     pub fn change_resub_to_primary_keys(&mut self) {
         if self.temp.is_none() {
-            println!("base.temp is None");
             self.primary_key = None;
         }
         self.primary_key = Some(self.temp.as_ref().unwrap().clone());

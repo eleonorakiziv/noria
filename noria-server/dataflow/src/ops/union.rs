@@ -129,7 +129,7 @@ impl Ingredient for Union {
         let new_emit: HashMap<IndexPair, Vec<usize>> =
             fields.into_iter().map(|(k, v)| (k.into(), v)).collect();
         match self.emit {
-            Emit::AllFrom(p, sh) => println!("Emit all from: {:?} and sharding {:?}", p, sh),
+            Emit::AllFrom(p, sh) => {},
             Emit::Project {
                 ref mut emit,
                 ref mut emit_l,
@@ -143,15 +143,13 @@ impl Ingredient for Union {
                         self.unassigned.entry(k.as_global()).or_insert(v);
                     }
                 }
-                println!("New emit {:?}", emit_l.clone());
             }
         }
-        println!("End of add_parent_to_union {:?}", self.unassigned);
     }
 
     fn update_unassigned(&mut self, ip: IndexPair, pi: NodeIndex) {
         match self.emit {
-            Emit::AllFrom(..) => println!("Emit all from"),
+            Emit::AllFrom(..) => {},
             Emit::Project {
                 ref mut emit,
                 ref mut emit_l,
@@ -173,7 +171,6 @@ impl Ingredient for Union {
                         cols_l.insert(*ip, columns.len());
                     }
                 }
-                println!("Update unassigned end {:?}", emit_l);
             }
         }
     }
@@ -549,7 +546,6 @@ impl Ingredient for Union {
                                     })
                                     .collect(),
                             );
-                            println!("Replay keys are {:?}", self.replay_key);
                         }
                     }
                     self.replay_key_orig = key_cols.clone();

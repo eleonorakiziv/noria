@@ -744,7 +744,6 @@ impl Domain {
                 self.handle_eviction(m, sends);
             }
             consumed => {
-                println!("consumed {:?}", consumed);
                 match consumed {
                     // workaround #16223
                     Packet::AddNode {

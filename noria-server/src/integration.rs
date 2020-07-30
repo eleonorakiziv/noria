@@ -2937,7 +2937,6 @@ fn test_shard_renew_lease() {
         .expect("failed to create shard lease");
     thread::sleep(Duration::from_millis(1000));
     assert_eq!(g.inputs().unwrap().len(), 3);
-    println!("{:?}", g.inputs());
 }
 
 #[test]
