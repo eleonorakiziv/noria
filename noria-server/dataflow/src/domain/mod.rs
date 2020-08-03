@@ -18,6 +18,7 @@ use prelude::*;
 use slog::Logger;
 use stream_cancel::Valve;
 
+use node::ParentInfo;
 use timekeeper::{RealTime, SimpleTracker, ThreadTime, Timer, TimerSet};
 use tokio::{self, prelude::*};
 use Readers;
@@ -749,7 +750,7 @@ impl Domain {
                     Packet::AddNode {
                         node,
                         parents,
-                        union_children,
+                        children,
                     } => {
                         let addr = (&node).local_addr();
                         self.not_ready.insert(addr);
@@ -760,17 +761,31 @@ impl Domain {
                         }
                         self.nodes.insert(addr, cell::RefCell::new(node));
 
-                        for (c, meta) in union_children.iter() {
+                        for (c, meta) in children.iter() {
                             let mut child = self.nodes.get_mut(*c).unwrap().borrow_mut();
                             child.add_parent(addr);
                             // update the child's metadata
                             child.set_metadata(meta.clone());
-                            child.increment_required();
+                            if child.is_union() {
+                                child.increment_required();
+                            }
                         }
                         debug!(self.log, "new node incorporated"; "local" => addr.id());
                     }
-                    Packet::RemoveNodes { nodes } => {
+                    Packet::RemoveNodes { nodes, children } => {
+                        // first remove children
                         for &node in &nodes {
+                            for (c, meta) in children.iter() {
+                                let mut child = self.nodes.get_mut(*c).unwrap().borrow_mut();
+                                child.remove_parent(node);
+                                match meta {
+                                    Some(m) => {
+                                        child.set_metadata(ParentInfo::Emit(m.clone()));
+                                        child.decrement_required();
+                                    }
+                                    None => {}
+                                }
+                            }
                             self.nodes[node].borrow_mut().remove();
                             self.state.remove(node);
                             trace!(self.log, "node removed"; "local" => node.id());

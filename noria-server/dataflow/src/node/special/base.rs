@@ -3,7 +3,6 @@ use chrono::{Duration, NaiveDate, NaiveDateTime, NaiveTime};
 use noria::{Modification, Operation, TableOperation};
 use prelude::*;
 use std::borrow::Cow;
-use std::cmp;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::time;
@@ -62,6 +61,10 @@ impl Base {
 
     pub fn key(&self) -> Option<&[usize]> {
         self.primary_key.as_ref().map(|cols| &cols[..])
+    }
+
+    pub fn resub_key(&self) -> Option<&[usize]> {
+        self.resub_keys.as_ref().map(|col| &col[..])
     }
 
     /// Add a new column to this base node.
@@ -351,6 +354,23 @@ impl Base {
             HashMap::new()
         }
     }
+
+    pub(in crate::node) fn clear_contents(
+        &mut self,
+        us: LocalNodeIndex,
+        state: &StateMap,
+    ) -> Vec<TableOperation> {
+        let db = state
+            .get(us)
+            .expect("base with primary key must be materialized");
+        let negatives: Vec<Record> = db
+            .cloned_records()
+            .into_iter()
+            .map(|row| Record::Negative(row))
+            .collect();
+        self.return_keys_for_delete_operation(negatives)
+    }
+
     pub(in crate::node) fn unsubscribe(
         &mut self,
         us: LocalNodeIndex,
@@ -411,63 +431,14 @@ impl Base {
         (neg_ops, pos_ops)
     }
 
-    // Returns table operations corresponding to (negative, positive) records.
-    pub(in crate::node) fn subscribe(
-        &mut self,
-        data: Records,
-        us: LocalNodeIndex,
-        state: &StateMap,
-    ) -> (Vec<TableOperation>, Vec<TableOperation>) {
+    // Returns table operations corresponding to imported records
+    pub(in crate::node) fn subscribe(&mut self, data: Records) -> Vec<TableOperation> {
         let positives = data
             .clone()
             .into_iter()
             .map(|rec| TableOperation::Insert(rec.to_vec()))
             .collect();
-        let mut negatives = Vec::default();
-        if self.resub_keys.is_none() {
-            return (negatives, positives);
-        }
-        let key_cols = self.resub_keys.as_ref().unwrap();
-        let db = state
-            .get(us)
-            .expect("base with primary key must be materialized");
-
-        let record_vec: Vec<Record> = data.into();
-        let new: Vec<Vec<DataType>> = record_vec.into_iter().map(|rec| rec.rec().into()).collect();
-        // HashMap: row_core to count
-        let mut imported: HashMap<Vec<DataType>, usize> = HashMap::default();
-        new.into_iter()
-            .map(|row| {
-                let key = row
-                    .clone()
-                    .into_iter()
-                    .enumerate()
-                    .filter(|&(i, _)| key_cols.contains(&i))
-                    .map(|(_, val)| val)
-                    .collect();
-
-                (key)
-            })
-            .for_each(|k| *imported.entry(k).or_insert(0) += 1);
-
-        let get_current_row_number = |current_key: &'_ _| -> usize {
-            match db.lookup(key_cols, &KeyType::from(current_key)) {
-                LookupResult::Some(rows) => rows.len(),
-                LookupResult::Missing => unreachable!(),
-            }
-        };
-
-        for (row_core, count) in imported.into_iter() {
-            let curr_row_count = get_current_row_number(&row_core);
-            let neg_row_count = cmp::min(count, curr_row_count);
-            for _ in 0..neg_row_count {
-                negatives.push(TableOperation::Delete {
-                    key: row_core.clone(),
-                });
-            }
-        }
-
-        (negatives, positives)
+        positives
     }
 
     fn return_keys_for_delete_operation(&self, mut negatives: Vec<Record>) -> Vec<TableOperation> {

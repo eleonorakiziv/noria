@@ -2,6 +2,7 @@
 #![feature(box_syntax)]
 #![feature(box_patterns)]
 #![feature(crate_visibility_modifier)]
+#![feature(vec_remove_item)]
 // Only used in a `debug_assert!` in `ops/grouped/mod.rs` therefore I added it
 // conditionally to avoid requiring another unstable feature for release builds.
 #![cfg_attr(debug, feature(is_sorted))]

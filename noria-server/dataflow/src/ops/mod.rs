@@ -14,7 +14,7 @@ pub mod rewrite;
 pub mod topk;
 pub mod trigger;
 pub mod union;
-use ops::union::Emit;
+use node::ParentInfo;
 
 #[derive(Clone, Serialize, Deserialize)]
 #[allow(clippy::large_enum_variant)]
@@ -223,8 +223,20 @@ impl Ingredient for NodeOperator {
     fn requires_full_materialization(&self) -> bool {
         impl_ingredient_fn_ref!(self, requires_full_materialization,)
     }
-    fn get_metadata(&self) -> Emit {
+    fn get_metadata(&self) -> ParentInfo {
         impl_ingredient_fn_ref!(self, get_metadata,)
+    }
+
+    fn set_metadata(&mut self, info: ParentInfo) {
+        impl_ingredient_fn_mut!(self, set_metadata, info)
+    }
+
+    fn add_parent_to_node(&mut self, fields: HashMap<NodeIndex, Vec<usize>>) {
+        impl_ingredient_fn_mut!(self, add_parent_to_node, fields)
+    }
+
+    fn update_unassigned(&mut self, ip: IndexPair, pi: NodeIndex) {
+        impl_ingredient_fn_mut!(self, update_unassigned, ip, pi)
     }
 }
 

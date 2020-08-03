@@ -1,6 +1,5 @@
 use fnv::FnvHashMap;
 use node::NodeType;
-use noria::data::TableOperation;
 use payload;
 use payload::MessagePurpose;
 use prelude::*;
@@ -68,39 +67,45 @@ impl Node {
                         data,
                         purpose,
                     }) => {
-                        let (mut negatives, mut positives) = (Vec::default(), Vec::default());
-                        if purpose == (MessagePurpose::Unsubscribe) {
-                            let (a, b) = b.unsubscribe(addr, &*state, self.fields.len());
-                            negatives = a;
-                            positives = b;
-                        } else if purpose == (MessagePurpose::Subscribe) {
-                            let (a, b) = b.subscribe(data, addr, &*state);
-                            negatives = a;
-                            positives = b;
-                        }
-                        let mut neg_rs = b.process(addr, negatives.clone(), &*state);
-                        if keyed_by.is_none() && !neg_rs.is_empty() {
-                            materialize(&mut neg_rs, None, state.get_mut(addr));
-                        }
+                        let (negatives, positives) = match purpose {
+                            MessagePurpose::Unsubscribe => {
+                                b.unsubscribe(addr, &*state, self.fields.len())
+                            }
+                            MessagePurpose::Subscribe => (Vec::default(), b.subscribe(data)),
+                            MessagePurpose::Clear => {
+                                (b.clear_contents(addr, &*state), Vec::default())
+                            }
+                            MessagePurpose::Other => (Vec::default(), Vec::default()),
+                        };
+
+                        // materialize negative records
+                        let mut neg_rs: Vec<Record> = Vec::default();
+                        if purpose == MessagePurpose::Unsubscribe
+                            || purpose == MessagePurpose::Clear
+                        {
+                            let mut neg = b.process(addr, negatives, &*state);
+                            if keyed_by.is_none() && !neg.is_empty() {
+                                materialize(&mut neg, None, state.get_mut(addr));
+                            }
+                            neg_rs = neg.into();
+                        };
+
                         if purpose == MessagePurpose::Unsubscribe && b.resub_keys.is_some() {
                             b.change_primary_to_resub_keys();
                             state.get_mut(addr).unwrap().swap_primary_and_secondary();
-                        } else if purpose == MessagePurpose::Subscribe && b.resub_keys.is_some() {
-                            b.change_resub_to_primary_keys();
-                            state.get_mut(addr).unwrap().swap_primary_and_secondary();
                         }
 
+                        // materialize positive records
                         let mut pos_rs = b.process(addr, positives, &*state);
                         if keyed_by.is_none() && !pos_rs.is_empty() {
                             materialize(&mut pos_rs, None, state.get_mut(addr));
                         }
 
-                        let mut rs: Vec<Record> = neg_rs.into();
-                        rs.append(&mut (pos_rs.into()));
+                        neg_rs.append(&mut (pos_rs.into()));
 
                         *m = Some(Box::new(Packet::Message {
                             link,
-                            data: rs.into(),
+                            data: neg_rs.into(),
                             tracer,
                             purpose: MessagePurpose::Other,
                         }));

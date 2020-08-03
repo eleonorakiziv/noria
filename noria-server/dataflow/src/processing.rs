@@ -2,7 +2,8 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
 use ops;
-use ops::union::Emit;
+
+use node::ParentInfo;
 use prelude::*;
 
 // TODO: make a Key type that is an ArrayVec<DataType>
@@ -286,13 +287,17 @@ where
         false
     }
 
-    fn add_parent_to_union(&mut self, _fields: HashMap<NodeIndex, Vec<usize>>) {}
+    fn add_parent_to_node(&mut self, _fields: HashMap<NodeIndex, Vec<usize>>) {}
+
+    fn remove_parent_from_union(&mut self, _parent: IndexPair) {}
 
     fn update_unassigned(&mut self, _ip: IndexPair, _pi: NodeIndex) {}
 
-    fn set_metadata(&mut self, _emit: Emit) {}
+    fn set_metadata(&mut self, _info: ParentInfo) {}
 
-    fn get_metadata(&self) -> Emit;
+    fn get_metadata(&self) -> ParentInfo;
 
     fn increment_required(&mut self) {}
+
+    fn decrement_required(&mut self) {}
 }

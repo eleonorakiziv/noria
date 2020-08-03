@@ -145,14 +145,14 @@ impl<'a> Migration<'a> {
         fields: Vec<usize>,
     ) -> NodeIndex {
         let child_ingredient = &mut self.mainline.ingredients[child];
-
         let mut hm = HashMap::new();
         hm.insert(parent, fields);
-        child_ingredient.add_parent_to_union(hm);
+        self.union_nodes.insert(child);
+
+        child_ingredient.add_parent_to_node(hm);
 
         // insert it into the graph
         self.mainline.ingredients.add_edge(parent, child, ());
-        self.union_nodes.insert(child);
         child
     }
 
@@ -452,12 +452,24 @@ impl<'a> Migration<'a> {
                     .insert(ni, ip);
                 nnodes += 1;
 
-                // update the emits if a parent of a union node
-                let union_children: Vec<_> = mainline
+                // update the metadata children store of the parent, if necessary
+                let children: Vec<_> = mainline
                     .ingredients
                     .neighbors_directed(ni, petgraph::EdgeDirection::Outgoing)
-                    .filter(|&ci| mainline.ingredients[ci].is_union())
-                    .map(|ci| ci) // I do not think I will need this!
+                    .filter(|&ni| {
+                        let child_node: &Node = &mainline.ingredients[ni];
+                        return if !child_node.is_internal()
+                            || (*child_node).is_join()
+                            || child_node.is_rewrite()
+                            || child_node.is_grouped()
+                        {
+                            // not implemented yet
+                            false
+                        } else {
+                            true
+                        };
+                    })
+                    .map(|ci| ci)
                     .collect();
 
                 // find the parent node
@@ -475,8 +487,7 @@ impl<'a> Migration<'a> {
                             .for_each(|ni| stack.push(ni));
                     }
                 }
-
-                union_children
+                children
                     .into_iter()
                     .for_each(|ci| mainline.ingredients[ci].update_unassigned(ip, pi));
             }

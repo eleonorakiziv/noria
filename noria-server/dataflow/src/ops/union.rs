@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
+use node::ParentInfo;
 use prelude::*;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -124,12 +125,12 @@ impl Union {
 
 impl Ingredient for Union {
     // consider updating columns as well
-    fn add_parent_to_union(&mut self, fields: HashMap<NodeIndex, Vec<usize>>) {
-        self.required += 1;
+    fn add_parent_to_node(&mut self, fields: HashMap<NodeIndex, Vec<usize>>) {
+        self.required += 1; // I wonder if I need it?
         let new_emit: HashMap<IndexPair, Vec<usize>> =
             fields.into_iter().map(|(k, v)| (k.into(), v)).collect();
         match self.emit {
-            Emit::AllFrom(p, sh) => {},
+            Emit::AllFrom(..) => {}
             Emit::Project {
                 ref mut emit,
                 ref mut emit_l,
@@ -147,9 +148,28 @@ impl Ingredient for Union {
         }
     }
 
+    fn remove_parent_from_union(&mut self, parent: IndexPair) {
+        match self.emit {
+            Emit::AllFrom(..) => {}
+            Emit::Project {
+                ref mut emit,
+                ref mut emit_l,
+                ref mut cols,
+                ref mut cols_l,
+            } => {
+                emit.remove(&parent);
+                cols.remove(&parent);
+                if parent.has_local() {
+                    emit_l.remove(&*parent);
+                    cols_l.remove(&*parent);
+                }
+            }
+        }
+    }
+
     fn update_unassigned(&mut self, ip: IndexPair, pi: NodeIndex) {
         match self.emit {
-            Emit::AllFrom(..) => {},
+            Emit::AllFrom(..) => {}
             Emit::Project {
                 ref mut emit,
                 ref mut emit_l,
@@ -175,16 +195,23 @@ impl Ingredient for Union {
         }
     }
 
-    fn set_metadata(&mut self, emit: Emit) {
-        self.emit = emit;
+    fn set_metadata(&mut self, info: ParentInfo) {
+        match info {
+            ParentInfo::Emit(e) => self.emit = e,
+            ParentInfo::IndexPair(..) => panic!("Wrong parent info for union"),
+        }
     }
 
     fn increment_required(&mut self) {
         self.required += 1;
     }
 
-    fn get_metadata(&self) -> Emit {
-        self.emit.clone()
+    fn decrement_required(&mut self) {
+        self.required -= 1;
+    }
+
+    fn get_metadata(&self) -> ParentInfo {
+        ParentInfo::Emit(self.emit.clone())
     }
 
     fn take(&mut self) -> NodeOperator {

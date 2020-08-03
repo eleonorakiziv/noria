@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::mem;
 
-use ops::union::Emit;
+use node::ParentInfo;
 use prelude::*;
 
 /// Kind of join
@@ -607,8 +607,20 @@ impl Ingredient for Join {
             )]
         }
     }
-    fn get_metadata(&self) -> Emit {
+    fn get_metadata(&self) -> ParentInfo {
         unimplemented!();
+    }
+
+    fn set_metadata(&mut self, _info: ParentInfo) {
+        unimplemented!();
+    }
+
+    fn add_parent_to_node(&mut self, _fields: HashMap<NodeIndex, Vec<usize>>) {
+        unimplemented!("add_parent_to_node is not supported for join");
+    }
+
+    fn update_unassigned(&mut self, _ip: IndexPair, _pi: NodeIndex) {
+        unimplemented!("update_unassigned is not supported for join");
     }
 }
 

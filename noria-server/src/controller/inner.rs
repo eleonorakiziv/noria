@@ -5,7 +5,10 @@ use crate::controller::schema;
 use crate::controller::{ControllerState, Migration, Recipe};
 use crate::controller::{Worker, WorkerIdentifier};
 use crate::coordination::{CoordinationMessage, CoordinationPayload, DomainDescriptor};
+use dataflow::node::special::Base;
+use dataflow::node::ParentInfo;
 use dataflow::ops::project::Project;
+use dataflow::ops::union::Emit;
 use dataflow::payload::MessagePurpose;
 use dataflow::prelude::*;
 use dataflow::{node, payload::ControlReplyPacket, prelude::Packet, DomainBuilder, DomainConfig};
@@ -86,6 +89,7 @@ struct Table {
     ni: NodeIndex,
     primary_key: Option<Vec<usize>>,
     rows: Option<Vec<Vec<DataType>>>,
+    resub_key: Option<Vec<usize>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -336,9 +340,9 @@ impl ControllerInner {
                     self.remove_query(authority, args)
                         .map(|r| json::to_string(&r).unwrap())
                 }),
-            (Method::POST, "/remove_base") => json::from_slice(&body)
+            (Method::POST, "/unsubscribe") => json::from_slice(&body)
                 .map_err(|_| StatusCode::BAD_REQUEST)
-                .map(|args| self.remove_base(args).map(|r| json::to_string(&r).unwrap())),
+                .map(|args| self.unsubscribe(args).map(|r| json::to_string(&r).unwrap())),
             (Method::POST, "/set_lease") => json::from_slice(&body)
                 .map_err(|_| StatusCode::BAD_REQUEST)
                 .map(|args| self.set_lease(args).map(|r| json::to_string(&r).unwrap())),
@@ -479,7 +483,7 @@ impl ControllerInner {
             .map(|n| n.global_addr())
             .collect();
         for ex in expired.into_iter() {
-            self.remove_base(ex).expect("failed to remove the node");
+            self.unsubscribe(ex).expect("failed to remove the node");
             let key: DataType = ex.index().into();
             self.global_table
                 .as_mut()
@@ -519,14 +523,14 @@ impl ControllerInner {
     }
 
     pub fn send_records(&mut self, ni: NodeIndex, data: Records, purpose: MessagePurpose) {
-        let parent = &mut self.ingredients[ni.clone()];
+        let node = &mut self.ingredients[ni.clone()];
         match self
             .domains
-            .get_mut(&parent.domain())
+            .get_mut(&node.domain())
             .unwrap()
             .send_to_healthy(
                 box Packet::Message {
-                    link: Link::new(parent.local_addr(), parent.local_addr()),
+                    link: Link::new(node.local_addr(), node.local_addr()),
                     data,
                     tracer: None,
                     purpose,
@@ -954,7 +958,14 @@ impl ControllerInner {
     fn table_builder(&self, base: &str) -> Option<TableBuilder> {
         let ni = match self.recipe.node_addr_for(base) {
             Ok(ni) => ni,
-            Err(_) => *self.inputs().get(base)?,
+            Err(_) => {
+                let inputs = self.inputs();
+                let res = inputs.get(base).clone();
+                if res.is_none() {
+                    return None;
+                }
+                *res?
+            }
         };
         let node = &self.ingredients[ni];
 
@@ -1293,8 +1304,7 @@ impl ControllerInner {
         graphviz(&self.ingredients, detailed, &self.materializations)
     }
 
-    pub fn remove_base(&mut self, node: NodeIndex) -> Result<(), String> {
-        assert!(self.ingredients[node].is_base());
+    pub fn unsubscribe(&mut self, node: NodeIndex) -> Result<(), String> {
         self.send_records(node, Default::default(), MessagePurpose::Unsubscribe);
         self.ingredients[node].remove();
         Ok(())
@@ -1411,6 +1421,14 @@ impl ControllerInner {
     }
 
     fn remove_nodes(&mut self, removals: &[NodeIndex]) -> Result<(), String> {
+        self.notify_domain(removals, HashMap::new())
+    }
+
+    fn notify_domain(
+        &mut self,
+        removals: &[NodeIndex],
+        children: HashMap<LocalNodeIndex, Option<Emit>>,
+    ) -> Result<(), String> {
         // Remove node from controller local state
         let mut domain_removals: HashMap<DomainIndex, Vec<LocalNodeIndex>> = HashMap::default();
         for ni in removals {
@@ -1422,6 +1440,8 @@ impl ControllerInner {
                 .push(self.ingredients[*ni].local_addr())
         }
 
+        let c = &children;
+
         // Send messages to domains
         for (domain, nodes) in domain_removals {
             trace!(
@@ -1430,12 +1450,13 @@ impl ControllerInner {
                 domain.index(),
             );
 
-            match self
-                .domains
-                .get_mut(&domain)
-                .unwrap()
-                .send_to_healthy(box Packet::RemoveNodes { nodes }, &self.workers)
-            {
+            match self.domains.get_mut(&domain).unwrap().send_to_healthy(
+                box Packet::RemoveNodes {
+                    nodes,
+                    children: c.clone(),
+                },
+                &self.workers,
+            ) {
                 Ok(_) => (),
                 Err(e) => match e {
                     SendError::IoError(ref ioe) => {
@@ -1546,11 +1567,14 @@ impl ControllerInner {
                 continue;
             }
 
-            let key = node.get_base().unwrap().key();
-            let primary_key = if key.is_none() {
-                vec![]
-            } else {
-                key.unwrap().to_vec()
+            let primary_key = match node.get_base().unwrap().key() {
+                Some(key) => key.to_vec(),
+                None => vec![],
+            };
+
+            let resub_key = match node.get_base().unwrap().resub_key() {
+                Some(k) => k.to_vec(),
+                None => vec![],
             };
 
             metadata.push(Table {
@@ -1559,6 +1583,7 @@ impl ControllerInner {
                 fields: node.fields.clone(),
                 rows: None,
                 primary_key: Some(primary_key),
+                resub_key: Some(resub_key),
             });
         }
 
@@ -1611,13 +1636,104 @@ impl ControllerInner {
         Ok(json_string)
     }
 
+    fn remove_base(&mut self, base: NodeIndex) -> Result<Vec<NodeIndex>, String> {
+        let index = self.ingredients[base].index().clone();
+        let children: Vec<NodeIndex> = self
+            .ingredients
+            .neighbors_directed(base, petgraph::EdgeDirection::Outgoing)
+            .collect();
+
+        let unions: HashSet<NodeIndex> = children
+            .clone()
+            .into_iter()
+            .filter(|&ni| self.ingredients[ni].is_union())
+            .collect();
+
+        let mut children_with_metadata: HashMap<LocalNodeIndex, Option<Emit>> = HashMap::new();
+
+        for child in children.clone().into_iter() {
+            let edge = self.ingredients.find_edge(base, child).unwrap();
+            let child_node = &mut self.ingredients[child];
+            if !unions.contains(&child) {
+                children_with_metadata
+                    .entry(child_node.local_addr())
+                    .or_insert(None);
+                self.ingredients.remove_edge(edge);
+                continue;
+            }
+            match index {
+                Some(ip) => {
+                    child_node.remove_parent_from_union(ip);
+                    let meta = child_node.get_metadata();
+                    match meta {
+                        ParentInfo::Emit(e) => {
+                            children_with_metadata
+                                .entry(child_node.local_addr())
+                                .or_insert(Some(e));
+                        }
+                        ParentInfo::IndexPair(_) => panic!("Wrong parent info"),
+                    }
+                }
+                None => {}
+            }
+            self.ingredients.remove_edge(edge);
+        }
+        self.notify_domain(&vec![base], children_with_metadata)
+            .expect("failed to let domain know of removal");
+
+        Ok(children)
+    }
+
     fn import_data(&mut self, serialized: String) -> Result<(), String> {
-        println!("Calling to import the data");
         let tables: Tables = serde_json::from_str(&serialized).unwrap();
         for table in tables.t.into_iter() {
-            // find the table with the same name
+            let ni = table.ni;
+            let name = table.name.clone();
+            let fields = table.fields.clone();
+            let resub_keys = table.resub_key.clone();
+            let anonymized = match resub_keys.clone() {
+                Some(resub_key) => {
+                    if !resub_key.is_empty() {
+                        // remove the contents of the anonymized base
+                        self.send_records(ni, Default::default(), MessagePurpose::Clear);
+                        true
+                    } else {
+                        false
+                    }
+                }
+                None => false,
+            };
+
+            let node = &self.ingredients[table.ni];
+
+            // check if it is the right base
+            if node.name != name || node.fields != fields {
+                println!("wrong node");
+                return Err("Could not find the matching node".to_owned());
+            }
+
+            let primary_key = match table.primary_key.clone() {
+                Some(k) => k.to_vec(),
+                None => vec![],
+            };
             let data: Records = table.rows.unwrap().into();
-            self.send_records(table.ni, data, MessagePurpose::Subscribe);
+            let children = self.remove_base(ni).expect("failed to remove base");
+
+            let new_fields: Vec<_> = (0..table.fields.len()).collect();
+
+            let new = self.migrate(|mig| {
+                let mut base = Base::default().with_key(primary_key);
+                if anonymized {
+                    base = base.anonymize_with_resub_key(resub_keys.unwrap());
+                }
+                let new_base = mig.add_base(name, fields, base);
+                for child in children.into_iter() {
+                    // TODO(ekiziv): Instead of mimicking the fields of the base, figure out what fields union collects from parents.
+                    mig.add_parent(new_base, child, new_fields.clone());
+                }
+                new_base
+            });
+            self.send_records(new, data, MessagePurpose::Subscribe)
         }
         Ok(())
     }

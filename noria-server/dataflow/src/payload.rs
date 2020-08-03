@@ -10,6 +10,7 @@ use noria::channel;
 use noria::internal::LocalOrNot;
 use prelude::*;
 
+use node::ParentInfo;
 use ops::union::Emit;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -82,8 +83,9 @@ pub struct SourceChannelIdentifier {
 
 #[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub enum MessagePurpose {
-    Unsubscribe, // removes or anonymizes base's contents
+    Unsubscribe, // clears or anonymizes base's contents depending on base's type
     Subscribe,
+    Clear,
     Other,
 }
 
@@ -145,13 +147,14 @@ pub enum Packet {
         //6
         node: Node,
         parents: Vec<LocalNodeIndex>,
-        union_children: HashMap<LocalNodeIndex, Emit>,
+        children: HashMap<LocalNodeIndex, ParentInfo>,
     },
 
     /// Direct domain to remove some nodes.
     RemoveNodes {
         //7
         nodes: Vec<LocalNodeIndex>,
+        children: HashMap<LocalNodeIndex, Option<Emit>>,
     },
 
     /// Add a new column to an existing `Base` node.
@@ -416,11 +419,11 @@ impl fmt::Debug for Packet {
             Packet::AddNode {
                 ref node,
                 ref parents,
-                ref union_children,
+                ref children,
             } => write!(
                 f,
                 "Packet::AddNode({:?})(parents:{:?}) children {:?}",
-                node, parents, union_children
+                node, parents, children
             ),
             Packet::Ready {
                 ref node,

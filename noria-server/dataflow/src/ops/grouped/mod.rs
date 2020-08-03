@@ -9,7 +9,7 @@ use prelude::*;
 pub mod aggregate;
 pub mod concat;
 pub mod extremum;
-use ops::union::Emit;
+use node::ParentInfo;
 
 /// Trait for implementing operations that collapse a group of records into a single record.
 ///
@@ -313,7 +313,20 @@ where
     fn is_selective(&self) -> bool {
         true
     }
-    fn get_metadata(&self) -> Emit {
+
+    fn get_metadata(&self) -> ParentInfo {
         unimplemented!();
+    }
+
+    fn set_metadata(&mut self, _info: ParentInfo) {
+        unimplemented!();
+    }
+
+    fn add_parent_to_node(&mut self, _fields: HashMap<NodeIndex, Vec<usize>>) {
+        unimplemented!("add_parent_to_node not supported for grouped operators");
+    }
+
+    fn update_unassigned(&mut self, _ip: IndexPair, _pi: NodeIndex) {
+        unimplemented!("update_unassigned not supported for grouped operators");
     }
 }

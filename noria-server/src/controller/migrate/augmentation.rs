@@ -59,7 +59,7 @@ pub(super) fn inform(
                 .filter(|ni| old_nodes.contains(ni))
                 .map(|ni| &graph[ni])
                 .filter(|n| n.domain() == domain)
-                .filter(|node| node.is_union())
+                .filter(|node| node.is_internal())
                 .map(|u| (u.local_addr(), u.get_metadata().clone()))
                 .collect();
 
@@ -68,7 +68,7 @@ pub(super) fn inform(
                 box Packet::AddNode {
                     node,
                     parents: old_parents,
-                    union_children: metadata,
+                    children: metadata,
                 },
                 &controller.workers,
             )

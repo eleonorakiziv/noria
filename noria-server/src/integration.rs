@@ -8,7 +8,6 @@ use dataflow::ops::join::JoinSource::*;
 use dataflow::ops::join::{Join, JoinSource, JoinType};
 use dataflow::ops::project::Project;
 use dataflow::ops::union::Union;
-use dataflow::prelude::NodeIndex;
 use dataflow::{DurabilityMode, PersistenceParameters};
 use futures::Future;
 use noria::consensus::{Authority, LocalAuthority};
@@ -2718,7 +2717,7 @@ mod parent_above_union {
         mutb.insert(vec![id.clone(), 1.into()]).unwrap();
         sleep();
 
-        g.remove_base(a).expect("failed to remove base");
+        g.unsubscribe(a).expect("failed to remove base");
 
         let res = cq.lookup(&[id.clone()], true).unwrap();
         assert_eq!(res.len(), 1);
@@ -2748,14 +2747,14 @@ mod parent_above_union {
         muta.insert(vec![id.clone(), 10.into()]).unwrap();
         mutb.insert(vec![id.clone(), 1.into()]).unwrap();
 
-        g.remove_base(a).expect("failed to remove base");
+        g.unsubscribe(a).expect("failed to remove base");
         sleep();
 
         let mut res = cq.lookup(&[id.clone()], true).unwrap();
         assert_eq!(res.len(), 1);
         assert!(res.iter().any(|r| r == &vec![id.clone(), 1.into()]));
 
-        g.remove_base(b).expect("failed to remove base");
+        g.unsubscribe(b).expect("failed to remove base");
 
         res = cq.lookup(&[id.clone()], true).unwrap();
         assert_eq!(res.len(), 0);
@@ -2800,7 +2799,7 @@ mod parent_above_union {
         .unwrap();
         sleep();
 
-        g.remove_base(a).expect("failed to remove the base");
+        g.unsubscribe(a).expect("failed to remove the base");
 
         let res = cq.lookup(&["blue".into()], true).unwrap();
         assert_eq!(res.len(), 2);
@@ -2856,7 +2855,7 @@ mod parent_above_union {
         mutb.insert(vec!["gmatute".into(), 0.into(), 0.into(), "maykop".into()])
             .unwrap();
 
-        g.remove_base(b).expect("failed to remove base");
+        g.unsubscribe(b).expect("failed to remove base");
 
         let mut cq = g.view("answers_by_lec").unwrap().into_sync();
         let res = cq.lookup(&[0.into()], true).unwrap();
@@ -3063,8 +3062,8 @@ fn test_simple_importing_user_data() {
         .expect("failed to insert");
 
     let user_data = g.get_data(vec![a, b]).expect("failed to recieve my data");
-    g.remove_base(a).expect("failed to remove userinfo");
-    g.remove_base(b).expect("failed to remove answers");
+    g.unsubscribe(a).expect("failed to remove userinfo");
+    g.unsubscribe(b).expect("failed to remove answers");
     sleep();
 
     g.import_data(user_data.to_string())
@@ -3141,8 +3140,8 @@ fn test_import_and_anonymize() {
         .expect("failed to insert");
 
     let user_data = g.get_data(vec![a, b]).expect("failed to recieve my data");
-    g.remove_base(a).expect("failed to remove userinfo");
-    g.remove_base(b).expect("failed to remove answers");
+    g.unsubscribe(a).expect("failed to remove userinfo");
+    g.unsubscribe(b).expect("failed to remove answers");
     sleep();
 
     g.import_data(user_data.to_string())
@@ -3172,4 +3171,167 @@ fn test_import_and_anonymize() {
     assert!(answers_res
         .iter()
         .any(|r| r == &vec![1.into(), 0.into(), "hey".into(), 0.into()]));
+}
+
+#[test]
+fn test_resubscription_union() {
+    let mut g = start_simple_partial("test_resubscription_union");
+    let a = g.migrate(|mig| {
+        let a = mig.add_base(
+            "answers_alice",
+            &["lec", "q", "answer"],
+            Base::default().with_key(vec![0, 1]),
+            // .anonymize_with_resub_key(vec![2]),
+        );
+        let b = mig.add_base(
+            "answers_boris",
+            &["lec", "q", "answer"],
+            Base::default().with_key(vec![0, 1]),
+            // .anonymize_with_resub_key(vec![2]),
+        );
+        let mut emits = HashMap::new();
+        emits.insert(a, vec![0, 1, 2]);
+        emits.insert(b, vec![0, 1, 2]);
+        let u = Union::new(emits);
+        let c = mig.add_ingredient("answers_union", &["lec", "q", "answer"], u);
+        let answers_by_lec = mig.add_ingredient(
+            "answers_by_lec",
+            &["lec", "q", "answer"],
+            Project::new(c, &[0, 1, 2], None, None),
+        );
+        mig.maintain_anonymous(answers_by_lec, &[0]);
+        a
+    });
+    let mut muta = g.table("answers_alice").unwrap().into_sync();
+    muta.insert(vec![0.into(), 1.into(), "hello".into()])
+        .expect("failed to insert");
+    let alice_data = g.get_data(vec![a]).expect("failed to get the data");
+    g.unsubscribe(a).expect("failed to unsubscribe Alice");
+    let mut view = g.view("answers_by_lec").unwrap().into_sync();
+    let res = view.lookup(&[0.into()], true).unwrap();
+    assert_eq!(res.len(), 0);
+    g.import_data(alice_data).expect("failed to import");
+    sleep();
+    let res_after_import = view.lookup(&[0.into()], true).unwrap();
+    assert_eq!(res_after_import.len(), 1);
+}
+
+#[test]
+fn test_resubscription_projection() {
+    let mut g = start_simple_partial("test_resubscription_union");
+    let a = g.migrate(|mig| {
+        let a = mig.add_base(
+            "answers_alice",
+            &["lec", "q", "answer"],
+            Base::default().with_key(vec![0, 1]),
+            // .anonymize_with_resub_key(vec![2]),
+        );
+        let b = mig.add_ingredient(
+            "my_answers",
+            &["lec", "q", "answer"],
+            Project::new(a, &[0, 1, 2], Some(vec![0.into()]), None),
+        );
+        mig.maintain_anonymous(b, &[3]);
+        a
+    });
+    let mut muta = g.table("answers_alice").unwrap().into_sync();
+    muta.insert(vec![0.into(), 1.into(), "hello".into()])
+        .expect("failed to insert");
+    let alice_data = g.get_data(vec![a]).expect("failed to get the data");
+    g.unsubscribe(a).expect("failed to unsubscribe Alice");
+    sleep();
+    let mut view = g.view("my_answers").unwrap().into_sync();
+    let res = view.lookup(&[0.into()], true).unwrap();
+    assert_eq!(res.len(), 0);
+    g.import_data(alice_data).expect("failed to import");
+    sleep();
+    let res_after_import = view.lookup(&[0.into()], true).unwrap();
+    assert_eq!(res_after_import.len(), 1);
+}
+
+#[test]
+fn test_resubscription_union_base_anonymization() {
+    let mut g = start_simple_partial("test_resubscription_union");
+    let (a, _b, _c) = g.migrate(|mig| {
+        let a = mig.add_base(
+            "answers_alice",
+            &["lec", "q", "answer"],
+            Base::default()
+                .with_key(vec![0, 1])
+                .anonymize_with_resub_key(vec![2]),
+        );
+        let b = mig.add_base(
+            "answers_boris",
+            &["lec", "q", "answer"],
+            Base::default()
+                .with_key(vec![0, 1])
+                .anonymize_with_resub_key(vec![2]),
+        );
+        let mut emits = HashMap::new();
+        emits.insert(a, vec![0, 1, 2]);
+        emits.insert(b, vec![0, 1, 2]);
+        let u = Union::new(emits);
+        let c = mig.add_ingredient("answers_union", &["lec", "q", "answer"], u);
+        let answers_by_lec = mig.add_ingredient(
+            "answers_by_lec",
+            &["lec", "q", "answer"],
+            Project::new(c, &[0, 1, 2], None, None),
+        );
+        mig.maintain_anonymous(answers_by_lec, &[0]);
+        (a, b, c)
+    });
+    let mut muta = g.table("answers_alice").unwrap().into_sync();
+    muta.insert(vec![0.into(), 1.into(), "hello".into()])
+        .expect("failed to insert");
+    let alice_data = g.get_data(vec![a]).expect("failed to get the data");
+    g.unsubscribe(a).expect("failed to unsubscribe Alice");
+    let mut view = g.view("answers_by_lec").unwrap().into_sync();
+    let res = view.lookup(&[0.into()], true).unwrap();
+    assert_eq!(res.len(), 1);
+    g.import_data(alice_data).expect("failed to import");
+    sleep();
+    sleep();
+    let res_after_import = view.lookup(&[0.into()], true).unwrap();
+    assert_eq!(res_after_import.len(), 1);
+    assert_eq!(
+        res_after_import,
+        vec![vec![0.into(), 1.into(), "hello".into()]]
+    );
+}
+
+#[test]
+fn test_resubscription_projection_with_anonymization() {
+    let mut g = start_simple_partial("test_resubscription_union");
+    let (a, _b) = g.migrate(|mig| {
+        let a = mig.add_base(
+            "answers_alice",
+            &["lec", "q", "answer"],
+            Base::default()
+                .with_key(vec![0, 1])
+                .anonymize_with_resub_key(vec![2]),
+        );
+        let b = mig.add_ingredient(
+            "my_answers",
+            &["lec", "q", "answer"],
+            Project::new(a, &[0, 1, 2], Some(vec![0.into()]), None),
+        );
+        mig.maintain_anonymous(b, &[3]);
+        (a, b)
+    });
+    let mut muta = g.table("answers_alice").unwrap().into_sync();
+    muta.insert(vec![0.into(), 1.into(), "hello".into()])
+        .expect("failed to insert");
+    let alice_data = g.get_data(vec![a]).expect("failed to get the data");
+    g.unsubscribe(a).expect("failed to unsubscribe Alice");
+    sleep();
+    let mut view = g.view("my_answers").unwrap().into_sync();
+    let res = view.lookup(&[0.into()], true).unwrap();
+    assert_eq!(res.len(), 1);
+    g.import_data(alice_data).expect("failed to import");
+    let res_after_import = view.lookup(&[0.into()], true).unwrap();
+    assert_eq!(res_after_import.len(), 1);
+    assert_eq!(
+        res_after_import,
+        vec![vec![0.into(), 1.into(), "hello".into(), 0.into()]]
+    );
 }

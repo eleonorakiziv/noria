@@ -459,11 +459,11 @@ impl<A: Authority + 'static> ControllerHandle<A> {
     /// Remove the given base from the graph.
     ///
     /// `Self::poll_ready` must have returned `Async::Ready` before you call this method.
-    pub fn remove_base(
+    pub fn unsubscribe(
         &mut self,
         ni: NodeIndex,
     ) -> impl Future<Item = (), Error = failure::Error> + Send {
-        self.rpc("remove_base", ni, "failed to remove base")
+        self.rpc("unsubscribe", ni, "failed to remove base")
     }
 
     ///
@@ -715,9 +715,9 @@ where
     }
     /// Remove the given base from the graph.
     ///
-    /// See [`ControllerHandle::remove_base`].
-    pub fn remove_base(&mut self, ni: NodeIndex) -> Result<(), failure::Error> {
-        let fut = self.handle()?.remove_base(ni);
+    /// See [`ControllerHandle::unsubscribe`].
+    pub fn unsubscribe(&mut self, ni: NodeIndex) -> Result<(), failure::Error> {
+        let fut = self.handle()?.unsubscribe(ni);
         self.run(fut)
     }
 

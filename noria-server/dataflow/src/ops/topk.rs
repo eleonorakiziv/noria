@@ -4,8 +4,8 @@ use std::collections::HashMap;
 
 use prelude::*;
 
+use node::ParentInfo;
 use nom_sql::OrderType;
-use ops::union::Emit;
 
 #[derive(Clone, Serialize, Deserialize)]
 struct Order(Vec<(usize, OrderType)>);
@@ -326,8 +326,32 @@ impl Ingredient for TopK {
     fn parent_columns(&self, col: usize) -> Vec<(NodeIndex, Option<usize>)> {
         vec![(self.src.as_global(), Some(col))]
     }
-    fn get_metadata(&self) -> Emit {
-        unimplemented!();
+    fn get_metadata(&self) -> ParentInfo {
+        ParentInfo::IndexPair(self.src)
+    }
+
+    fn set_metadata(&mut self, info: ParentInfo) {
+        match info {
+            ParentInfo::Emit(..) => panic!("wrong parent info!"),
+            ParentInfo::IndexPair(p) => {
+                self.src = p;
+            }
+        }
+    }
+
+    fn add_parent_to_node(&mut self, fields: HashMap<NodeIndex, Vec<usize>>) {
+        // should specify only one parent
+        assert_eq!(fields.len(), 1);
+        for (&ni, _) in fields.iter() {
+            self.src = ni.into();
+        }
+    }
+    fn update_unassigned(&mut self, ip: IndexPair, pi: NodeIndex) {
+        // check the parent index corresponds to value we stored
+        assert_eq!(pi, self.src.as_global());
+        if !self.src.has_local() {
+            self.src = ip;
+        }
     }
 }
 

@@ -396,7 +396,6 @@ impl From<Literal> for DataType {
     }
 }
 
-use petgraph::prelude::NodeIndex;
 use std::borrow::Cow;
 use std::time::Duration;
 

@@ -1,4 +1,4 @@
-use ops::union::Emit;
+use node::ParentInfo;
 use prelude::*;
 use std::collections::{HashMap, HashSet};
 
@@ -207,8 +207,17 @@ impl Ingredient for Rewrite {
     fn parent_columns(&self, column: usize) -> Vec<(NodeIndex, Option<usize>)> {
         vec![(self.src.as_global(), Some(column))]
     }
-    fn get_metadata(&self) -> Emit {
-        unimplemented!();
+    fn get_metadata(&self) -> ParentInfo {
+        unimplemented!("getting metadata is not supported for rewrite");
+    }
+    fn set_metadata(&mut self, _info: ParentInfo) {
+        unimplemented!("setting metadata is not supported for rewrite");
+    }
+    fn add_parent_to_node(&mut self, _fields: HashMap<NodeIndex, Vec<usize>>) {
+        unimplemented!("add_parent_to_node is not supported for rewrite");
+    }
+    fn update_unassigned(&mut self, _ip: IndexPair, _pi: NodeIndex) {
+        unimplemented!("add_parent_to_node is not supported for rewrite");
     }
 }
 

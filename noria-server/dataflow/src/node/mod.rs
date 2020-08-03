@@ -39,6 +39,12 @@ pub struct Node {
     sharded_by: Sharding,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ParentInfo {
+    Emit(Emit),
+    IndexPair(IndexPair),
+}
+
 // constructors
 impl Node {
     pub fn new<S1, FS, S2, NT>(name: S1, fields: FS, inner: NT) -> Node
@@ -170,27 +176,43 @@ impl Node {
         Ingredient::description(&**self, detailed)
     }
 
-    pub fn add_parent_to_union(&mut self, fields: HashMap<NodeIndex, Vec<usize>>) {
+    /// Adds the specified parent to self.
+    pub fn add_parent_to_node(&mut self, fields: HashMap<NodeIndex, Vec<usize>>) {
+        match self.inner {
+            NodeType::Internal(ref mut i) => i.add_parent_to_node(fields),
+            _ => unimplemented!("add_parent_to_node only implemented for NodeType::Internal"),
+        }
+    }
+
+    pub fn remove_parent_from_union(&mut self, parent: IndexPair) {
         if let NodeType::Internal(NodeOperator::Union(ref mut u)) = self.inner {
-            u.add_parent_to_union(fields);
+            u.remove_parent_from_union(parent);
         } else {
-            unreachable!("only union nodes implement add_parent_to_union");
+            unreachable!(
+                "only union nodes implement remove_parent_from_union, current node type: {:?}",
+                self
+            );
         }
     }
 
     pub fn update_unassigned(&mut self, ip: IndexPair, pi: NodeIndex) {
-        if let NodeType::Internal(NodeOperator::Union(ref mut u)) = self.inner {
-            u.update_unassigned(ip, pi);
-        } else {
-            unreachable!("only union nodes could update unassigned");
+        match self.inner {
+            NodeType::Internal(ref mut i) => i.update_unassigned(ip, pi),
+            _ => unimplemented!("update_unassigned only implemented for NodeType::Internal"),
         }
     }
 
-    pub fn set_metadata(&mut self, emit: Emit) {
-        if let NodeType::Internal(NodeOperator::Union(ref mut u)) = self.inner {
-            u.set_metadata(emit);
-        } else {
-            unreachable!("only union nodes could update metadata");
+    pub fn get_metadata(&self) -> ParentInfo {
+        match self.inner {
+            NodeType::Internal(ref i) => i.get_metadata(),
+            _ => unimplemented!("get_metadata only implemented for NodeType::Internal"),
+        }
+    }
+
+    pub fn set_metadata(&mut self, meta: ParentInfo) {
+        match self.inner {
+            NodeType::Internal(ref mut i) => i.set_metadata(meta),
+            _ => unimplemented!("set_metadata only implemented for NodeType::Internal"),
         }
     }
 
@@ -202,11 +224,11 @@ impl Node {
         }
     }
 
-    pub fn get_metadata(&self) -> Emit {
-        if let NodeType::Internal(NodeOperator::Union(ref u)) = self.inner {
-            u.get_metadata()
+    pub fn decrement_required(&mut self) {
+        if let NodeType::Internal(NodeOperator::Union(ref mut u)) = self.inner {
+            u.decrement_required();
         } else {
-            unreachable!("only union nodes could get metadata");
+            unreachable!("only union nodes could update metadata");
         }
     }
 }
@@ -228,6 +250,10 @@ impl Node {
     /// Set this node's sharding property.
     pub fn shard_by(&mut self, s: Sharding) {
         self.sharded_by = s;
+    }
+
+    pub fn index(&self) -> Option<IndexPair> {
+        self.index
     }
 }
 
@@ -376,6 +402,10 @@ impl Node {
 
     crate fn add_parent(&mut self, parent: LocalNodeIndex) {
         self.parents.push(parent);
+    }
+
+    crate fn remove_parent(&mut self, parent: LocalNodeIndex) {
+        self.parents.remove_item(&parent);
     }
 
     crate fn try_remove_child(&mut self, child: LocalNodeIndex) -> bool {
@@ -533,6 +563,24 @@ impl Node {
             false
         }
     }
+
+    pub fn is_rewrite(&self) -> bool {
+        if let NodeType::Internal(NodeOperator::Rewrite(..)) = self.inner {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_grouped(&self) -> bool {
+        match self.inner {
+            NodeType::Internal(NodeOperator::Sum(..)) => true,
+            NodeType::Internal(NodeOperator::Concat(..)) => true,
+            NodeType::Internal(NodeOperator::Extremum(..)) => true,
+            _ => false,
+        }
+    }
+
     pub fn is_expired(&self) -> bool {
         if let NodeType::Base(b) = &self.inner {
             b.is_expired()
@@ -540,6 +588,7 @@ impl Node {
             unimplemented!("only bases implement lease functionality");
         }
     }
+
     pub fn set_lease(&mut self, ttl: Duration) {
         if let NodeType::Base(ref mut b) = self.inner {
             b.set_lease(ttl);
