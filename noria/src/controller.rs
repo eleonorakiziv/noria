@@ -461,7 +461,7 @@ impl<A: Authority + 'static> ControllerHandle<A> {
     /// `Self::poll_ready` must have returned `Async::Ready` before you call this method.
     pub fn unsubscribe(
         &mut self,
-        ni: NodeIndex,
+        ni: u32,
     ) -> impl Future<Item = (), Error = failure::Error> + Send {
         self.rpc("unsubscribe", ni, "failed to remove base")
     }
@@ -501,11 +501,15 @@ impl<A: Authority + 'static> ControllerHandle<A> {
     ///
     /// Requests the data in the specified tables
     ///
-    pub fn get_data(
+    pub fn export_data(
         &mut self,
-        tables: Vec<NodeIndex>,
+        tables: Vec<u32>,
     ) -> impl Future<Item = String, Error = failure::Error> + Send {
-        self.rpc("get_data", tables, "failed to get the data for tables")
+        self.rpc(
+            "export_data",
+            tables,
+            "failed to export the data for tables",
+        )
     }
 
     ///
@@ -514,7 +518,7 @@ impl<A: Authority + 'static> ControllerHandle<A> {
     pub fn import_data(
         &mut self,
         data: String,
-    ) -> impl Future<Item = (), Error = failure::Error> + Send {
+    ) -> impl Future<Item = Vec<u32>, Error = failure::Error> + Send {
         self.rpc("import_data", data, "failed to import the data")
     }
     /// Construct a synchronous interface to this controller instance using the given executor to
@@ -716,7 +720,7 @@ where
     /// Remove the given base from the graph.
     ///
     /// See [`ControllerHandle::unsubscribe`].
-    pub fn unsubscribe(&mut self, ni: NodeIndex) -> Result<(), failure::Error> {
+    pub fn unsubscribe(&mut self, ni: u32) -> Result<(), failure::Error> {
         let fut = self.handle()?.unsubscribe(ni);
         self.run(fut)
     }
@@ -745,15 +749,15 @@ where
     ///
     /// Requests the data in the specified tables
     ///
-    pub fn get_data(&mut self, tables: Vec<NodeIndex>) -> Result<String, failure::Error> {
-        let fut = self.handle()?.get_data(tables);
+    pub fn export_data(&mut self, tables: Vec<u32>) -> Result<String, failure::Error> {
+        let fut = self.handle()?.export_data(tables);
         self.run(fut)
     }
 
     ///
     /// Imports the data from the JSON string
     ///
-    pub fn import_data(&mut self, data: String) -> Result<(), failure::Error> {
+    pub fn import_data(&mut self, data: String) -> Result<Vec<u32>, failure::Error> {
         let fut = self.handle()?.import_data(data);
         self.run(fut)
     }

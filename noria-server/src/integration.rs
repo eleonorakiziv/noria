@@ -2717,7 +2717,8 @@ mod parent_above_union {
         mutb.insert(vec![id.clone(), 1.into()]).unwrap();
         sleep();
 
-        g.unsubscribe(a).expect("failed to remove base");
+        g.unsubscribe(a.index() as u32)
+            .expect("failed to remove base");
 
         let res = cq.lookup(&[id.clone()], true).unwrap();
         assert_eq!(res.len(), 1);
@@ -2747,14 +2748,16 @@ mod parent_above_union {
         muta.insert(vec![id.clone(), 10.into()]).unwrap();
         mutb.insert(vec![id.clone(), 1.into()]).unwrap();
 
-        g.unsubscribe(a).expect("failed to remove base");
+        g.unsubscribe(a.index() as u32)
+            .expect("failed to remove base");
         sleep();
 
         let mut res = cq.lookup(&[id.clone()], true).unwrap();
         assert_eq!(res.len(), 1);
         assert!(res.iter().any(|r| r == &vec![id.clone(), 1.into()]));
 
-        g.unsubscribe(b).expect("failed to remove base");
+        g.unsubscribe(b.index() as u32)
+            .expect("failed to remove base");
 
         res = cq.lookup(&[id.clone()], true).unwrap();
         assert_eq!(res.len(), 0);
@@ -2799,7 +2802,8 @@ mod parent_above_union {
         .unwrap();
         sleep();
 
-        g.unsubscribe(a).expect("failed to remove the base");
+        g.unsubscribe(a.index() as u32)
+            .expect("failed to remove the base");
 
         let res = cq.lookup(&["blue".into()], true).unwrap();
         assert_eq!(res.len(), 2);
@@ -2855,7 +2859,8 @@ mod parent_above_union {
         mutb.insert(vec!["gmatute".into(), 0.into(), 0.into(), "maykop".into()])
             .unwrap();
 
-        g.unsubscribe(b).expect("failed to remove base");
+        g.unsubscribe(b.index() as u32)
+            .expect("failed to remove base");
 
         let mut cq = g.view("answers_by_lec").unwrap().into_sync();
         let res = cq.lookup(&[0.into()], true).unwrap();
@@ -3013,7 +3018,9 @@ fn test_getting_user_data() {
     mutb.insert(vec![1.into(), 0.into(), "hey".into()])
         .expect("failed to insert");
 
-    let actual_data = g.get_data(vec![a, b]).expect("failed to receive my data");
+    let actual_data = g
+        .export_data(vec![a.index() as u32, b.index() as u32])
+        .expect("failed to receive my data");
     let expect_data = "{\"t\":[{\"name\":\"userinfo_alice\",\"fields\":[\"name\",\"apikey\",\"color\",\"city\"],\"ni\":6,\"primary_key\":[],\"rows\":[[{\"TinyText\":[97,108,105,99,101,0,0,0,0,0,0,0,0,0,0]},{\"Int\":65},{\"TinyText\":[98,108,117,101,0,0,0,0,0,0,0,0,0,0,0]},{\"TinyText\":[109,97,121,107,111,112,0,0,0,0,0,0,0,0,0]}]]},
     {\"name\":\"answers_alice\",\"fields\":[\"lec\",\"q\",\"answer\"],\"ni\":7,\"primary_key\":[],\"rows\":[[{\"Int\":0},{\"Int\":1},{\"TinyText\":[104,101,108,108,111,0,0,0,0,0,0,0,0,0,0]}],[{\"Int\":1},{\"Int\":0},{\"TinyText\":[104,101,121,0,0,0,0,0,0,0,0,0,0,0,0]}]]}]}";
     assert_eq!(actual_data, expect_data);
@@ -3061,9 +3068,13 @@ fn test_simple_importing_user_data() {
     mutb.insert(vec![1.into(), 0.into(), "hey".into()])
         .expect("failed to insert");
 
-    let user_data = g.get_data(vec![a, b]).expect("failed to recieve my data");
-    g.unsubscribe(a).expect("failed to remove userinfo");
-    g.unsubscribe(b).expect("failed to remove answers");
+    let user_data = g
+        .export_data(vec![a.index() as u32, b.index() as u32])
+        .expect("failed to recieve my data");
+    g.unsubscribe(a.index() as u32)
+        .expect("failed to remove userinfo");
+    g.unsubscribe(b.index() as u32)
+        .expect("failed to remove answers");
     sleep();
 
     g.import_data(user_data.to_string())
@@ -3139,9 +3150,13 @@ fn test_import_and_anonymize() {
     mutb.insert(vec![1.into(), 0.into(), "hey".into()])
         .expect("failed to insert");
 
-    let user_data = g.get_data(vec![a, b]).expect("failed to recieve my data");
-    g.unsubscribe(a).expect("failed to remove userinfo");
-    g.unsubscribe(b).expect("failed to remove answers");
+    let user_data = g
+        .export_data(vec![a.index() as u32, b.index() as u32])
+        .expect("failed to recieve my data");
+    g.unsubscribe(a.index() as u32)
+        .expect("failed to remove userinfo");
+    g.unsubscribe(b.index() as u32)
+        .expect("failed to remove answers");
     sleep();
 
     g.import_data(user_data.to_string())
@@ -3205,8 +3220,11 @@ fn test_resubscription_union() {
     let mut muta = g.table("answers_alice").unwrap().into_sync();
     muta.insert(vec![0.into(), 1.into(), "hello".into()])
         .expect("failed to insert");
-    let alice_data = g.get_data(vec![a]).expect("failed to get the data");
-    g.unsubscribe(a).expect("failed to unsubscribe Alice");
+    let alice_data = g
+        .export_data(vec![a.index() as u32])
+        .expect("failed to get the data");
+    g.unsubscribe(a.index() as u32)
+        .expect("failed to unsubscribe Alice");
     let mut view = g.view("answers_by_lec").unwrap().into_sync();
     let res = view.lookup(&[0.into()], true).unwrap();
     assert_eq!(res.len(), 0);
@@ -3237,8 +3255,11 @@ fn test_resubscription_projection() {
     let mut muta = g.table("answers_alice").unwrap().into_sync();
     muta.insert(vec![0.into(), 1.into(), "hello".into()])
         .expect("failed to insert");
-    let alice_data = g.get_data(vec![a]).expect("failed to get the data");
-    g.unsubscribe(a).expect("failed to unsubscribe Alice");
+    let alice_data = g
+        .export_data(vec![a.index() as u32])
+        .expect("failed to get the data");
+    g.unsubscribe(a.index() as u32)
+        .expect("failed to unsubscribe Alice");
     sleep();
     let mut view = g.view("my_answers").unwrap().into_sync();
     let res = view.lookup(&[0.into()], true).unwrap();
@@ -3283,8 +3304,11 @@ fn test_resubscription_union_base_anonymization() {
     let mut muta = g.table("answers_alice").unwrap().into_sync();
     muta.insert(vec![0.into(), 1.into(), "hello".into()])
         .expect("failed to insert");
-    let alice_data = g.get_data(vec![a]).expect("failed to get the data");
-    g.unsubscribe(a).expect("failed to unsubscribe Alice");
+    let alice_data = g
+        .export_data(vec![a.index() as u32])
+        .expect("failed to get the data");
+    g.unsubscribe(a.index() as u32)
+        .expect("failed to unsubscribe Alice");
     let mut view = g.view("answers_by_lec").unwrap().into_sync();
     let res = view.lookup(&[0.into()], true).unwrap();
     assert_eq!(res.len(), 1);
@@ -3321,8 +3345,11 @@ fn test_resubscription_projection_with_anonymization() {
     let mut muta = g.table("answers_alice").unwrap().into_sync();
     muta.insert(vec![0.into(), 1.into(), "hello".into()])
         .expect("failed to insert");
-    let alice_data = g.get_data(vec![a]).expect("failed to get the data");
-    g.unsubscribe(a).expect("failed to unsubscribe Alice");
+    let alice_data = g
+        .export_data(vec![a.index() as u32])
+        .expect("failed to get the data");
+    g.unsubscribe(a.index() as u32)
+        .expect("failed to unsubscribe Alice");
     sleep();
     let mut view = g.view("my_answers").unwrap().into_sync();
     let res = view.lookup(&[0.into()], true).unwrap();

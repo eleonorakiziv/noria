@@ -21,7 +21,7 @@ impl GroupCommitQueueSet {
     /// Returns whether the given packet should be persisted.
     pub fn should_append(&self, p: &Packet, nodes: &DomainNodes) -> bool {
         if let Packet::Input { .. } = *p {
-            assert!(nodes[p.dst()].borrow().is_base());
+            assert!(nodes[p.dst()].borrow().is_base() || nodes[p.dst()].borrow().is_dropped());
             true
         } else {
             false

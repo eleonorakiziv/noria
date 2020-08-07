@@ -346,9 +346,9 @@ impl ControllerInner {
             (Method::POST, "/set_lease") => json::from_slice(&body)
                 .map_err(|_| StatusCode::BAD_REQUEST)
                 .map(|args| self.set_lease(args).map(|r| json::to_string(&r).unwrap())),
-            (Method::POST, "/get_data") => json::from_slice(&body)
+            (Method::POST, "/export_data") => json::from_slice(&body)
                 .map_err(|_| StatusCode::BAD_REQUEST)
-                .map(|args| self.get_data(args).map(|r| json::to_string(&r).unwrap())),
+                .map(|args| self.export_data(args).map(|r| json::to_string(&r).unwrap())),
             (Method::POST, "/import_data") => json::from_slice(&body)
                 .map_err(|_| StatusCode::BAD_REQUEST)
                 .map(|args| self.import_data(args).map(|r| json::to_string(&r).unwrap())),
@@ -483,7 +483,8 @@ impl ControllerInner {
             .map(|n| n.global_addr())
             .collect();
         for ex in expired.into_iter() {
-            self.unsubscribe(ex).expect("failed to remove the node");
+            self.unsubscribe(ex.index() as u32)
+                .expect("failed to remove the node");
             let key: DataType = ex.index().into();
             self.global_table
                 .as_mut()
@@ -956,6 +957,7 @@ impl ControllerInner {
     /// Obtain a TableBuild that can be used to construct a Table to perform writes and deletes
     /// from the given named base node.
     fn table_builder(&self, base: &str) -> Option<TableBuilder> {
+        let inputs = self.inputs();
         let ni = match self.recipe.node_addr_for(base) {
             Ok(ni) => ni,
             Err(_) => {
@@ -1304,7 +1306,8 @@ impl ControllerInner {
         graphviz(&self.ingredients, detailed, &self.materializations)
     }
 
-    pub fn unsubscribe(&mut self, node: NodeIndex) -> Result<(), String> {
+    pub fn unsubscribe(&mut self, ni: u32) -> Result<(), String> {
+        let node = NodeIndex::from(ni);
         self.send_records(node, Default::default(), MessagePurpose::Unsubscribe);
         self.ingredients[node].remove();
         Ok(())
@@ -1557,9 +1560,9 @@ impl ControllerInner {
         Ok(())
     }
 
-    fn get_data(&mut self, tables: Vec<NodeIndex>) -> Result<String, String> {
+    fn export_data(&mut self, ts: Vec<u32>) -> Result<String, String> {
         // verify that tableids are corresponding to the shard name
-
+        let tables: Vec<NodeIndex> = ts.into_iter().map(|i| NodeIndex::from(i as u32)).collect();
         let mut metadata: Vec<Table> = Vec::new();
         for ni in tables.into_iter() {
             let node = &self.ingredients[ni];
@@ -1684,7 +1687,8 @@ impl ControllerInner {
         Ok(children)
     }
 
-    fn import_data(&mut self, serialized: String) -> Result<(), String> {
+    fn import_data(&mut self, serialized: String) -> Result<Vec<u32>, String> {
+        let mut new_bases: Vec<u32> = Vec::new();
         let tables: Tables = serde_json::from_str(&serialized).unwrap();
         for table in tables.t.into_iter() {
             let ni = table.ni;
@@ -1733,9 +1737,13 @@ impl ControllerInner {
                 }
                 new_base
             });
-            self.send_records(new, data, MessagePurpose::Subscribe)
+            self.send_records(new.clone(), data, MessagePurpose::Subscribe);
+            assert!(self.ingredients[new].is_base());
+            new_bases.push(new.index() as u32);
         }
-        Ok(())
+        println!("{:?}", new_bases);
+        println!("{}", self.graphviz(true));
+        Ok(new_bases)
     }
 }
 
