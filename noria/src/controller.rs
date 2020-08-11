@@ -302,6 +302,7 @@ impl<A: Authority + 'static> ControllerHandle<A> {
         // getting false positives, then it is safe to increase the allowed hit count, however, the
         // limit_mutator_creation test in src/controller/handle.rs should then be updated as well.
         #[cfg(debug_assertions)]
+        // assert_infrequent::at_most(400);
         let name = name.to_string();
         let views = self.views.clone();
         let fut = self
@@ -315,7 +316,6 @@ impl<A: Authority + 'static> ControllerHandle<A> {
                 Ok(None) => future::Either::B(future::err(failure::err_msg("view does not exist"))),
                 Err(e) => future::Either::B(future::err(failure::Error::from(e))),
             }
-            .map_err(move |e| e.context(format!("building view for {}", name)).into())
         })
     }
 
