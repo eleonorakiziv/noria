@@ -6,7 +6,7 @@ use crate::view::{View, ViewBuilder, ViewRpc};
 use crate::ActivationResult;
 #[cfg(debug_assertions)]
 use assert_infrequent;
-use failure::{self, ResultExt};
+use failure::{self, Fail, ResultExt};
 use hyper;
 use petgraph::graph::NodeIndex;
 use serde::{Deserialize, Serialize};
@@ -302,22 +302,21 @@ impl<A: Authority + 'static> ControllerHandle<A> {
         // getting false positives, then it is safe to increase the allowed hit count, however, the
         // limit_mutator_creation test in src/controller/handle.rs should then be updated as well.
         #[cfg(debug_assertions)]
-        // assert_infrequent::at_most(400);
         let name = name.to_string();
-
-        let body = self
+        let views = self.views.clone();
+        let fut = self
             .handle
             .call(ControllerRequest::new("view_builder", &name).unwrap())
-            .map_err(|e| format_err!("failed to fetch view builder: {:?}", e))
-            .wait()
-            .unwrap();
-        let views = self.views.clone();
-        match serde_json::from_slice::<Option<ViewBuilder>>(&body) {
-            Ok(Some(vb)) => future::Either::A(vb.build(views).map_err(failure::Error::from)),
-            Ok(None) => future::Either::B(future::err(failure::err_msg("view does not exist"))),
-            Err(e) => future::Either::B(future::err(failure::Error::from(e))),
-        }
-        // .map_err(move |e| e.context(format!("building table for {}", name)).into())
+            .map_err(|e| format_err!("failed to fetch view builder: {:?}", e));
+
+        fut.and_then(move |body: hyper::Chunk| {
+            match serde_json::from_slice::<Option<ViewBuilder>>(&body) {
+                Ok(Some(vb)) => future::Either::A(vb.build(views).map_err(failure::Error::from)),
+                Ok(None) => future::Either::B(future::err(failure::err_msg("view does not exist"))),
+                Err(e) => future::Either::B(future::err(failure::Error::from(e))),
+            }
+            .map_err(move |e| e.context(format!("building view for {}", name)).into())
+        })
     }
 
     /// Obtain a `Table` that allows you to perform writes, deletes, and other operations on the
@@ -330,27 +329,26 @@ impl<A: Authority + 'static> ControllerHandle<A> {
     ) -> impl Future<Item = Table, Error = failure::Error> + Send + 'static {
         // This call attempts to detect if this function is being called in a loop. If this
         // is getting false positives, then it is safe to increase the allowed hit count.
-        #[cfg(debug_assertions)]
-        // assert_infrequent::at_most(400);
+        let domains = self.domains.clone();
         let name = name.to_string();
-        let body = self
+        let fut = self
             .handle
             .call(ControllerRequest::new("table_builder", &name).unwrap())
-            .map_err(|e| format_err!("failed to fetch table builder: {:?}", e))
-            .wait()
-            .unwrap();
-        let domains = self.domains.clone();
+            .map_err(|e| format_err!("failed to fetch table builder: {:?}", e));
 
-        match serde_json::from_slice::<Option<TableBuilder>>(&body) {
-            Ok(Some(tb)) => future::Either::A(
-                tb.build(domains)
-                    .into_future()
-                    .map_err(failure::Error::from),
-            ),
-            Ok(None) => future::Either::B(future::err(failure::err_msg("view table not exist"))),
-            Err(e) => future::Either::B(future::err(failure::Error::from(e))),
-        }
-        // .map_err(move |e| e.context(format!("building table for {}", name)).into())
+        fut.and_then(move |body: hyper::Chunk| {
+            match serde_json::from_slice::<Option<TableBuilder>>(&body) {
+                Ok(Some(tb)) => future::Either::A(
+                    tb.build(domains)
+                        .into_future()
+                        .map_err(failure::Error::from),
+                ),
+                Ok(None) => {
+                    future::Either::B(future::err(failure::err_msg("view table not exist")))
+                }
+                Err(e) => future::Either::B(future::err(failure::Error::from(e))),
+            }
+        })
     }
 
     // TODO: we can't use impl Trait here, because it would assume that the returned future is tied
