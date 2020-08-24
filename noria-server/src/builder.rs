@@ -211,7 +211,9 @@ impl Builder {
         fields: &'static [&'static str],
         primary_index: Vec<usize>,
     ) -> Result<(), failure::Error> {
-        let view_emit: Vec<usize> = (0..fields.len()).collect();
+        let view_emit: Vec<usize> = (0..(fields.len())).collect();
+        let mut new_fields = fields.to_vec().clone();
+        new_fields.push("bogokey");
         sh.migrate(move |mig| {
             let table = mig.add_base(
                 format!("{}_table", name.clone()),
@@ -220,7 +222,7 @@ impl Builder {
             );
             let controller_view = mig.add_ingredient(
                 "controller_view",
-                fields,
+                new_fields,
                 Project::new(table, &view_emit, Some(vec![0.into()]), None),
             );
             let user_view = mig.add_ingredient(

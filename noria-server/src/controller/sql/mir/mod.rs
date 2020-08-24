@@ -1914,7 +1914,6 @@ impl SqlToMirConverter {
                 } else {
                     qg.parameters().into_iter().map(Column::from).collect()
                 };
-
                 let leaf_node = MirNode::new(
                     name,
                     self.schema_version,

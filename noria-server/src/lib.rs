@@ -356,6 +356,7 @@
 #![feature(try_blocks)]
 #![feature(vec_remove_item)]
 #![feature(crate_visibility_modifier)]
+#![feature(entry_insert)]
 #![deny(missing_docs)]
 #![deny(unused_extern_crates)]
 //#![deny(unreachable_pub)]

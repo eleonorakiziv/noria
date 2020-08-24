@@ -774,10 +774,10 @@ impl Domain {
                     }
                     Packet::RemoveNodes { nodes, children } => {
                         // first remove children
-                        for &node in &nodes {
+                        for &(li, ni) in &nodes {
                             for (c, meta) in children.iter() {
                                 let mut child = self.nodes.get_mut(*c).unwrap().borrow_mut();
-                                child.remove_parent(node);
+                                child.remove_parent(li);
                                 match meta {
                                     Some(m) => {
                                         child.set_metadata(ParentInfo::Emit(m.clone()));
@@ -786,14 +786,19 @@ impl Domain {
                                     None => {}
                                 }
                             }
-                            self.nodes[node].borrow_mut().remove();
-                            self.state.remove(node);
-                            trace!(self.log, "node removed"; "local" => node.id());
+                            {
+                                let key = &(ni, *self.shard.as_ref().unwrap_or(&0));
+                                self.readers.lock().unwrap().remove(key);
+                            }
+
+                            self.nodes[li].borrow_mut().remove();
+                            self.state.remove(li);
+                            trace!(self.log, "node removed"; "local" => li.id());
                         }
 
-                        for node in nodes {
+                        for (li, _) in nodes {
                             for cn in self.nodes.iter_mut() {
-                                cn.1.borrow_mut().try_remove_child(node);
+                                cn.1.borrow_mut().try_remove_child(li);
                                 // NOTE: since nodes are always removed leaves-first, it's not
                                 // important to update parent pointers here
                             }

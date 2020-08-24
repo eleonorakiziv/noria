@@ -90,55 +90,80 @@ fn handle_message(
     match m.v {
         ReadQuery::Normal {
             target,
-            mut keys,
+            keys,
             block,
         } => {
-            let immediate = READERS.with(|readers_cache| {
-                let mut readers_cache = readers_cache.borrow_mut();
-                let reader = readers_cache.entry(target).or_insert_with(|| {
-                    let readers = s.lock().unwrap();
-                    readers.get(&target).unwrap().clone()
-                });
-
-                let mut ret = Vec::with_capacity(keys.len());
-                ret.resize(keys.len(), Vec::new());
-
-                // first do non-blocking reads for all keys to see if we can return immediately
-                let found = keys
-                    .iter_mut()
-                    .map(|key| {
-                        let rs = reader.try_find_and(key, dup).map(|r| r.0);
-                        (key, rs)
-                    })
-                    .enumerate();
-
+            let immediate = READERS.with(|cache| {
+                let keys_len = keys.len();
+                let mut ret = Vec::with_capacity(keys_len.clone());
+                ret.resize(keys_len.clone(), Vec::new());
                 let mut ready = true;
                 let mut replaying = false;
-                for (i, (key, v)) in found {
-                    match v {
-                        Ok(Some(rs)) => {
-                            // immediate hit!
-                            ret[i] = rs;
-                            *key = vec![];
-                        }
-                        Err(()) => {
-                            // map not yet ready
-                            ready = false;
-                            *key = vec![];
-                            break;
-                        }
-                        Ok(None) => {
-                            // triggered partial replay
-                            replaying = true;
+
+
+                let check = |ready: &mut bool, replaying: &mut bool, ret: &mut Vec<Vec<Vec<DataType>>>, keys: &mut Vec<Vec<DataType>>|  {
+                    let mut readers_cache = cache.borrow_mut();
+                    let reader = readers_cache.entry(target).or_insert_with(|| {
+                        let readers = s.lock().unwrap();
+                        readers.get(&target).unwrap().clone()
+                    });
+                    // first do non-blocking reads for all keys to see if we can return immediately
+                    let found = keys
+                        .iter_mut()
+                        .map(|key| {
+                            let rs = reader.try_find_and(key, dup).map(|r| r.0);
+                            (key, rs)
+                        })
+                        .enumerate();
+                    for (i, (key, v)) in found {
+                        match v {
+                            Ok(Some(rs)) => {
+                                // immediate hit!
+                                ret[i] = rs;
+                                *key = vec![];
+                            }
+                            Err(()) => {
+                                println!("key: {:?}, v: {:?}", key.clone(), v.clone());
+                                // map not yet ready
+                                *ready = false;
+                                *key = vec![];
+                                break;
+                            }
+                            Ok(None) => {
+                                // triggered partial replay
+                                *replaying = true;
+                            }
                         }
                     }
-                }
+                    if !*ready && !*replaying {
+                        // trigger backfills for all the keys we missed on for later
+                        for key in keys {
+                            if !key.is_empty() {
+                                reader.trigger(key);
+                            }
+                        }
+                    };
+                };
+
+                check(&mut ready, &mut replaying, &mut ret, &mut keys.clone());
 
                 if !ready {
-                    return Ok(Tagged {
-                        tag,
-                        v: ReadReply::Normal(Err(())),
-                    });
+                    {
+                        let mut readers_cache = cache.borrow_mut();
+                        readers_cache.remove(&target);
+                    }
+                    let mut ret = Vec::with_capacity(keys_len.clone());
+                    ret.resize(keys_len, Vec::new());
+                    let mut ready = true;
+                    let mut replaying = false;
+                    println!("Checking second time!");
+                    check(&mut ready, &mut replaying, &mut ret, &mut keys.clone());
+                    if !ready {
+                        return Ok(Tagged {
+                            tag,
+                            v: ReadReply::Normal(Err(())),
+                        });
+                    }
                 }
 
                 if !replaying {
@@ -147,13 +172,6 @@ fn handle_message(
                         tag,
                         v: ReadReply::Normal(Ok(ret)),
                     });
-                }
-
-                // trigger backfills for all the keys we missed on for later
-                for key in &keys {
-                    if !key.is_empty() {
-                        reader.trigger(key);
-                    }
                 }
 
                 Err((keys, ret))

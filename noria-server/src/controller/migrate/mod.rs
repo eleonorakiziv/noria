@@ -423,9 +423,6 @@ impl<'a> Migration<'a> {
 
         // Assign local addresses to all new nodes, and initialize them
         for (domain, nodes) in &mut domain_new_nodes {
-            // Number of pre-existing nodes
-            let mut nnodes = mainline.remap.get(domain).map(HashMap::len).unwrap_or(0);
-
             if nodes.is_empty() {
                 // Nothing to do here
                 continue;
@@ -435,22 +432,23 @@ impl<'a> Migration<'a> {
 
             // Give local addresses to every (new) node
             for &ni in nodes.iter() {
+                let max_local_index = mainline.max_local_index.entry(*domain).or_insert(0);
                 debug!(log,
                        "assigning local index";
                        "type" => format!("{:?}", mainline.ingredients[ni]),
                        "node" => ni.index(),
-                       "local" => nnodes
+                       "local" => *max_local_index
                 );
 
                 let mut ip: IndexPair = ni.into();
-                ip.set_local(unsafe { LocalNodeIndex::make(nnodes as u32) });
+                ip.set_local(unsafe { LocalNodeIndex::make(max_local_index.clone()) });
                 mainline.ingredients[ni].set_finalized_addr(ip);
                 mainline
                     .remap
                     .entry(*domain)
                     .or_insert_with(HashMap::new)
                     .insert(ni, ip);
-                nnodes += 1;
+                *max_local_index += 1;
 
                 // update the metadata children store of the parent, if necessary
                 let children: Vec<_> = mainline

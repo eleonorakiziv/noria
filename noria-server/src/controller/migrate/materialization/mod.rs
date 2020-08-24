@@ -59,7 +59,7 @@ pub(in crate::controller) struct Materializations {
     tag_generator: AtomicUsize,
 
     paths_ending_at: HashMap<NodeIndex, Vec<Vec<(NodeIndex, Vec<Option<usize>>)>>>, // paths ending at a specific NodeIndex
-    initialized_readers: HashSet<NodeIndex>,
+    pub(crate) initialized_readers: HashSet<NodeIndex>,
     new_parents: HashSet<NodeIndex>,
 }
 

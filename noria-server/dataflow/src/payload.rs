@@ -153,7 +153,7 @@ pub enum Packet {
     /// Direct domain to remove some nodes.
     RemoveNodes {
         //7
-        nodes: Vec<LocalNodeIndex>,
+        nodes: Vec<(LocalNodeIndex, NodeIndex)>,
         children: HashMap<LocalNodeIndex, Option<Emit>>,
     },
 

@@ -4,9 +4,7 @@ use crate::debug::stats;
 use crate::table::{Table, TableBuilder, TableRpc};
 use crate::view::{View, ViewBuilder, ViewRpc};
 use crate::ActivationResult;
-#[cfg(debug_assertions)]
-use assert_infrequent;
-use failure::{self, Fail, ResultExt};
+use failure::{self, ResultExt};
 use hyper;
 use petgraph::graph::NodeIndex;
 use serde::{Deserialize, Serialize};

@@ -65,6 +65,9 @@ pub(super) struct ControllerInner {
     /// State between migrations
     pub(super) remap: HashMap<DomainIndex, HashMap<NodeIndex, IndexPair>>,
 
+    // Keeps track of the highest index in the domain
+    pub(super) max_local_index: HashMap<DomainIndex, u32>,
+
     pub(super) epoch: Epoch,
 
     pending_recovery: Option<(Vec<String>, usize)>,
@@ -609,6 +612,7 @@ impl ControllerInner {
             epoch: state.epoch,
 
             remap: HashMap::default(),
+            max_local_index: HashMap::default(),
 
             read_addrs: HashMap::default(),
             workers: HashMap::default(),
@@ -957,7 +961,6 @@ impl ControllerInner {
     /// Obtain a TableBuild that can be used to construct a Table to perform writes and deletes
     /// from the given named base node.
     fn table_builder(&self, base: &str) -> Option<TableBuilder> {
-        let inputs = self.inputs();
         let ni = match self.recipe.node_addr_for(base) {
             Ok(ni) => ni,
             Err(_) => {
@@ -1433,14 +1436,14 @@ impl ControllerInner {
         children: HashMap<LocalNodeIndex, Option<Emit>>,
     ) -> Result<(), String> {
         // Remove node from controller local state
-        let mut domain_removals: HashMap<DomainIndex, Vec<LocalNodeIndex>> = HashMap::default();
+        let mut domain_removals: HashMap<DomainIndex, Vec<(LocalNodeIndex, NodeIndex)>> = HashMap::default();
         for ni in removals {
             self.ingredients[*ni].remove();
             debug!(self.log, "Removed node {}", ni.index());
             domain_removals
                 .entry(self.ingredients[*ni].domain())
                 .or_insert_with(Vec::new)
-                .push(self.ingredients[*ni].local_addr())
+                .push((self.ingredients[*ni].local_addr(), *ni))
         }
 
         let c = &children;
@@ -1452,6 +1455,11 @@ impl ControllerInner {
                 "Notifying domain {} of node removals",
                 domain.index(),
             );
+            for (_, ni) in nodes.clone() {
+                self.remap.get_mut(&domain).unwrap().remove(&ni);
+                self.domain_nodes.get_mut(&domain).unwrap().remove_item(&ni);
+            }
+
 
             match self.domains.get_mut(&domain).unwrap().send_to_healthy(
                 box Packet::RemoveNodes {
@@ -1561,7 +1569,7 @@ impl ControllerInner {
     }
 
     fn export_data(&mut self, ts: Vec<u32>) -> Result<String, String> {
-        // verify that tableids are corresponding to the shard name
+        //TODO: verify that tableid provided are corresponding to the shard name
         let tables: Vec<NodeIndex> = ts.into_iter().map(|i| NodeIndex::from(i as u32)).collect();
         let mut metadata: Vec<Table> = Vec::new();
         for ni in tables.into_iter() {
@@ -1605,6 +1613,17 @@ impl ControllerInner {
             }
             nis
         });
+        // collect indices to be removed
+        let mut nodes_to_remove = Vec::new();
+        for (_, ni) in view_nis.clone() {
+            // we have added a projection and a reader, so let's delete them
+            self
+                .ingredients
+                .neighbors_directed(ni, petgraph::EdgeDirection::Outgoing)
+                .for_each(|ni| nodes_to_remove.push(ni));
+            nodes_to_remove.push(ni);
+        };
+
         let mut ts = Vec::new();
         let mut json_string = "".to_string();
         for mut table in metadata.into_iter() {
@@ -1622,13 +1641,6 @@ impl ControllerInner {
                 })
                 .collect();
             table.rows = Some(rows);
-
-            // delete the newly created view
-            if view_nis.contains_key(&table.name) {
-                let &view_ni = view_nis.get(&table.name).unwrap();
-                self.remove_leaf(view_ni)
-                    .expect("failed to remove the view");
-            }
             ts.push(table);
         }
 
@@ -1636,6 +1648,14 @@ impl ControllerInner {
         let tables = Tables { t: ts };
         let json = serde_json::to_string(&tables).unwrap();
         json_string.push_str(&json);
+
+        for node in nodes_to_remove.into_iter() {
+            if self.ingredients[node].is_reader() && self.materializations.initialized_readers.contains(&node){
+                self.materializations.initialized_readers.remove(&node);
+            }
+            self.remove_leaf(node).expect("failed to remove the view");
+            self.ingredients.remove_node(node);
+        }
         Ok(json_string)
     }
 
@@ -1712,7 +1732,6 @@ impl ControllerInner {
 
             // check if it is the right base
             if node.name != name || node.fields != fields {
-                println!("wrong node");
                 return Err("Could not find the matching node".to_owned());
             }
 
@@ -1741,8 +1760,6 @@ impl ControllerInner {
             assert!(self.ingredients[new].is_base());
             new_bases.push(new.index() as u32);
         }
-        println!("{:?}", new_bases);
-        println!("{}", self.graphviz(true));
         Ok(new_bases)
     }
 }
