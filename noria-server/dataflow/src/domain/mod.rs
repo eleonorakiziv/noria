@@ -13,7 +13,7 @@ use futures;
 use group_commit::GroupCommitQueueSet;
 use noria::channel::{self, TcpSender};
 pub use noria::internal::DomainIndex as Index;
-use payload::{ControlReplyPacket, ReplayPieceContext, SourceSelection};
+use payload::{ChPermStep, ControlReplyPacket, ReplayPieceContext, SourceSelection};
 use prelude::*;
 use slog::Logger;
 use stream_cancel::Valve;
@@ -547,6 +547,28 @@ impl Domain {
             return;
         }
 
+        // update permissions if necessary
+        match &*m {
+            Packet::ChangePermissions {
+                ref step,
+                ref permissions,
+                ..
+            } => {
+                if *step == ChPermStep::Update {
+                    self.nodes[me].borrow_mut().update_permissions(*permissions);
+                }
+            }
+            _ => {}
+        }
+        // check permissions
+        {
+            let n = self.nodes[me].borrow();
+            let parent_permissions = m.get_permissions();
+            if !n.is_base() && !n.can_propagate(parent_permissions) {
+                return;
+            }
+        }
+
         let (mut m, evictions) = {
             let mut n = self.nodes[me].borrow_mut();
             self.process_times.start(me);
@@ -683,14 +705,62 @@ impl Domain {
                 return;
             }
             &box Packet::Message { .. } => {}
+
             &box Packet::ReplayPiece { .. } => {
                 unreachable!("replay should never go through dispatch");
             }
+            &box Packet::ChangePermissions {
+                ref step,
+                ref keys,
+                ref partial,
+                ..
+            } => {
+                match step {
+                    ChPermStep::Cleanup => {
+                        if !partial.is_empty() {
+                            // find the replay paths that go through me
+                            let mut paths = Vec::new();
+                            for (tag, rp) in self.replay_paths.iter() {
+                                if rp.path.iter().find(|rps| rps.node == me).is_some() {
+                                    paths.push((tag, rp));
+                                }
+                            }
+                            // find all paths corresponding to partial children
+                            let mut tags_for_partial = HashMap::new();
+                            for &p in partial.into_iter() {
+                                for (&tag, rp) in paths.iter() {
+                                    if rp.path.iter().find(|rps| rps.node == p).is_some() {
+                                        tags_for_partial.insert(tag.clone(), p.clone());
+                                    }
+                                }
+                            }
+                            // send EvictKeys to partial nodes
+                            for (tag, p) in tags_for_partial {
+                                self.handle_eviction(
+                                    Box::new(Packet::EvictKeys {
+                                        keys: keys.clone(),
+                                        link: Link::new(me, p),
+                                        tag: tag,
+                                    }),
+                                    sends,
+                                );
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
             ref m => unreachable!("dispatch process got {:?}", m),
         }
-
-        // NOTE: we can't directly iterate over .children due to self.dispatch in the loop
         let nchildren = self.nodes[me].borrow().children().len();
+        let partial_nodes = {
+            match m.as_ref().unwrap() {
+                &box Packet::ChangePermissions { ref partial, .. } => partial.clone(),
+                _ => HashSet::new(),
+            }
+        };
+        // NOTE: we can't directly iterate over .children due to self.dispatch in the loop
         for i in 0..nchildren {
             // avoid cloning if we can
             let mut m = if i == nchildren - 1 {
@@ -700,6 +770,11 @@ impl Domain {
             };
 
             let childi = self.nodes[me].borrow().children()[i];
+            if partial_nodes.contains(&childi) {
+                //Eviction has already been sent to childi
+                continue;
+            }
+
             let child_is_merger = {
                 // XXX: shouldn't NLL make this unnecessary?
                 let c = self.nodes[childi].borrow();
@@ -730,7 +805,7 @@ impl Domain {
         m.trace(PacketEvent::Handle);
 
         match *m {
-            Packet::Message { .. } | Packet::Input { .. } => {
+            Packet::Message { .. } | Packet::Input { .. } | Packet::ChangePermissions { .. } => {
                 // WO for https://github.com/rust-lang/rfcs/issues/1403
                 self.total_forward_time.start();
                 self.dispatch(m, sends, executor);
@@ -786,12 +861,13 @@ impl Domain {
                                     None => {}
                                 }
                             }
-                            {
+                            let mut node = self.nodes[li].borrow_mut();
+                            if node.is_reader() {
                                 let key = &(ni, *self.shard.as_ref().unwrap_or(&0));
-                                self.readers.lock().unwrap().remove(key);
+                                assert!(self.readers.lock().unwrap().remove(key).is_some());
                             }
 
-                            self.nodes[li].borrow_mut().remove();
+                            node.remove();
                             self.state.remove(li);
                             trace!(self.log, "node removed"; "local" => li.id());
                         }
@@ -1129,6 +1205,7 @@ impl Domain {
                         );
 
                         let link = Link::new(from, self.replay_paths[&tag].path[0].node);
+                        let permissions_from = { self.nodes[from].borrow().get_permissions() };
 
                         // we're been given an entire state snapshot, but we need to digest it
                         // piece by piece spawn off a thread to do that chunking. however, before
@@ -1144,6 +1221,7 @@ impl Domain {
                                 last: state.is_empty(),
                             },
                             data: Vec::<Record>::new().into(),
+                            permissions: permissions_from,
                         };
 
                         if !state.is_empty() {
@@ -1213,6 +1291,7 @@ impl Domain {
                                             link, // to is overwritten by receiver
                                             context: ReplayPieceContext::Regular { last },
                                             data: chunk,
+                                            permissions: permissions_from,
                                         };
 
                                         trace!(log, "sending batch"; "#" => i, "[]" => len);
@@ -1518,7 +1597,7 @@ impl Domain {
                     }
                     LookupResult::Missing => false,
                 });
-
+                let permissions = { self.nodes[source].borrow().permissions };
                 let m = if !keys.is_empty() {
                     Some(box Packet::ReplayPiece {
                         link: Link::new(source, path[0].node),
@@ -1529,6 +1608,7 @@ impl Domain {
                             ignore: false,
                         },
                         data: rs.into(),
+                        permissions,
                     })
                 } else {
                     None
@@ -1632,13 +1712,12 @@ impl Domain {
                     .get(source)
                     .expect("migration replay path started with non-materialized node")
                     .lookup(&cols[..], &KeyType::from(&key[..]));
-
+                let permissions = { self.nodes[source].borrow().get_permissions() };
                 let mut k = HashSet::new();
                 k.insert(Vec::from(key));
                 if let LookupResult::Some(rs) = rs {
                     use std::iter::FromIterator;
                     let data = Records::from_iter(rs.into_iter().map(|r| self.seed_row(source, r)));
-
                     let m = Some(box Packet::ReplayPiece {
                         link: Link::new(source, path[0].node),
                         tag,
@@ -1648,6 +1727,7 @@ impl Domain {
                             ignore: false,
                         },
                         data,
+                        permissions,
                     });
                     (m, source, None)
                 } else {
@@ -1742,6 +1822,7 @@ impl Domain {
                     link,
                     mut data,
                     mut context,
+                    permissions,
                 } => {
                     if let ReplayPieceContext::Partial { ref for_keys, .. } = context {
                         trace!(
@@ -1803,6 +1884,14 @@ impl Domain {
                             }
                         }
                     }
+                    //check permissions
+                    {
+                        let n = self.nodes[link.dst].borrow();
+                        if !n.is_base() && !n.can_propagate(permissions) {
+                            //sending an empty packet
+                            data.clear();
+                        }
+                    }
 
                     // forward the current message through all local nodes.
                     let m = box Packet::ReplayPiece {
@@ -1810,6 +1899,7 @@ impl Domain {
                         tag,
                         data,
                         context: context.clone(),
+                        permissions,
                     };
                     let mut m = Some(m);
 

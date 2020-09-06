@@ -300,4 +300,6 @@ where
     fn increment_required(&mut self) {}
 
     fn decrement_required(&mut self) {}
+
+    fn get_emits(&self) -> HashMap<NodeIndex, Vec<usize>>;
 }

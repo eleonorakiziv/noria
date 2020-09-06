@@ -622,6 +622,9 @@ impl Ingredient for Join {
     fn update_unassigned(&mut self, _ip: IndexPair, _pi: NodeIndex) {
         unimplemented!("update_unassigned is not supported for join");
     }
+    fn get_emits(&self) -> HashMap<NodeIndex, Vec<usize>> {
+        unimplemented!()
+    }
 }
 
 #[cfg(test)]

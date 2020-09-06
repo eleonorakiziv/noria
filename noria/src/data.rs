@@ -18,6 +18,12 @@ pub struct Lease<'a> {
     pub ttl: Duration,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PermissionsChange {
+    pub ni: u32,
+    pub to: u8,
+}
+
 /// The main type used for user data throughout the codebase.
 ///
 /// Having this be an enum allows for our code to be agnostic about the types of user data except

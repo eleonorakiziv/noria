@@ -1,5 +1,5 @@
 use crate::consensus::{self, Authority};
-use crate::data::Lease;
+use crate::data::{Lease, PermissionsChange};
 use crate::debug::stats;
 use crate::table::{Table, TableBuilder, TableRpc};
 use crate::view::{View, ViewBuilder, ViewRpc};
@@ -515,6 +515,21 @@ impl<A: Authority + 'static> ControllerHandle<A> {
     ) -> impl Future<Item = Vec<u32>, Error = failure::Error> + Send {
         self.rpc("import_data", data, "failed to import the data")
     }
+
+    ///
+    /// Changes the permissions for the node specified
+    ///
+    pub fn change_permissions(
+        &mut self,
+        node: u32,
+        new: u8,
+    ) -> impl Future<Item = (), Error = failure::Error> + Send {
+        self.rpc(
+            "change_permissions",
+            PermissionsChange { ni: node, to: new },
+            "failed to change permissions",
+        )
+    }
     /// Construct a synchronous interface to this controller instance using the given executor to
     /// execute all operations.
     ///
@@ -753,6 +768,14 @@ where
     ///
     pub fn import_data(&mut self, data: String) -> Result<Vec<u32>, failure::Error> {
         let fut = self.handle()?.import_data(data);
+        self.run(fut)
+    }
+
+    ///
+    /// Changes the permissions for the node specified
+    ///
+    pub fn change_permissions(&mut self, node: u32, new: u8) -> Result<(), failure::Error> {
+        let fut = self.handle()?.change_permissions(node, new);
         self.run(fut)
     }
 }

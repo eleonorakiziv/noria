@@ -477,7 +477,6 @@ impl<'a> Plan<'a> {
                 // keep if this path is different
                 distinct_paths.insert(&paths[&p.tag])
             });
-            assert!(!self.pending.is_empty());
         } else {
             assert!(self.pending.is_empty());
         }

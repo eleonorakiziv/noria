@@ -770,6 +770,17 @@ impl Ingredient for Union {
                 .collect(),
         }
     }
+    fn get_emits(&self) -> HashMap<NodeIndex, Vec<usize>> {
+        if let Emit::Project { ref emit, .. } = self.emit {
+            let mut new = HashMap::default();
+            for (ip, vec) in emit.into_iter() {
+                new.insert(ip.as_global(), vec.clone());
+            }
+            new
+        } else {
+            HashMap::new()
+        }
+    }
 }
 
 #[cfg(test)]

@@ -219,6 +219,10 @@ impl Ingredient for Rewrite {
     fn update_unassigned(&mut self, _ip: IndexPair, _pi: NodeIndex) {
         unimplemented!("add_parent_to_node is not supported for rewrite");
     }
+
+    fn get_emits(&self) -> HashMap<NodeIndex, Vec<usize>> {
+        unimplemented!()
+    }
 }
 
 #[cfg(test)]

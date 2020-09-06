@@ -3362,3 +3362,283 @@ fn test_resubscription_projection_with_anonymization() {
         vec![vec![0.into(), 1.into(), "hello".into(), 0.into()]]
     );
 }
+
+#[test]
+fn test_permissions_child_same_as_parent() {
+    let mut g = start_simple_partial("test_permissions_child_same_as_parent");
+    let (a, b) = g.migrate(|mig| {
+        let a = mig.add_base_with_permissions(
+            "answers_alice",
+            &["lec", "q", "answer"],
+            Base::default()
+                .with_key(vec![0, 1])
+                .anonymize_with_resub_key(vec![2]),
+            Some(0b0000_1111),
+        );
+        let b = mig.add_ingredient(
+            "my_answers",
+            &["lec", "q", "answer"],
+            Project::new(a, &[0, 1, 2], Some(vec![0.into()]), None),
+        );
+        mig.maintain_anonymous(b, &[3]);
+        (a, b)
+    });
+    let mut muta = g.table("answers_alice").unwrap().into_sync();
+    println!("Inserting");
+    muta.insert(vec![0.into(), 1.into(), "hello".into()])
+        .expect("failed to insert");
+    let mut view = g.view("my_answers").unwrap().into_sync();
+    let res = view.lookup(&[0.into()], true).unwrap();
+    assert_eq!(res.len(), 1);
+}
+
+#[test]
+fn test_permissions_child_different_from_parent() {
+    let mut g = start_simple_partial("test_permissions_child_different_from_parent");
+    let (a, b) = g.migrate(|mig| {
+        let a = mig.add_base_with_permissions(
+            "answers_alice",
+            &["lec", "q", "answer"],
+            Base::default()
+                .with_key(vec![0, 1])
+                .anonymize_with_resub_key(vec![2]),
+            Some(0b0000_1101),
+        );
+        let b = mig.add_ingredient_with_permissions(
+            "my_answers",
+            &["lec", "q", "answer"],
+            Project::new(a, &[0, 1, 2], Some(vec![0.into()]), None),
+            Some(0b0000_0010),
+        );
+        mig.maintain_anonymous(b, &[3]);
+        (a, b)
+    });
+    let mut muta = g.table("answers_alice").unwrap().into_sync();
+    println!("Inserting");
+    muta.insert(vec![0.into(), 1.into(), "hello".into()])
+        .expect("failed to insert");
+    let mut view = g.view("my_answers").unwrap().into_sync();
+    println!("looking up");
+    let res = view.lookup(&[0.into()], true).unwrap();
+    assert_eq!(res.len(), 0);
+}
+
+#[test]
+fn test_permissions_union_same_permissions() {
+    let mut g = start_simple_partial("permissions_union");
+    g.migrate(|mig| {
+        let a = mig.add_base_with_permissions(
+            "answers_alice",
+            &["lec", "q", "answer"],
+            Base::default()
+                .with_key(vec![0, 1])
+                .anonymize_with_resub_key(vec![2]),
+            Some(0b0000_1111),
+        );
+        let b = mig.add_base_with_permissions(
+            "answers_boris",
+            &["lec", "q", "answer"],
+            Base::default()
+                .with_key(vec![0, 1])
+                .anonymize_with_resub_key(vec![2]),
+            Some(0b0000_1111),
+        );
+        let mut emits = HashMap::new();
+        emits.insert(a, vec![0, 1, 2]);
+        emits.insert(b, vec![0, 1, 2]);
+        let u = Union::new(emits);
+        let c = mig.add_ingredient("answers_union", &["lec", "q", "answer"], u);
+        mig.maintain_anonymous(c, &[0]);
+    });
+    let mut muta = g.table("answers_alice").unwrap().into_sync();
+    let mut mutb = g.table("answers_boris").unwrap().into_sync();
+    println!("Inserting");
+    muta.insert(vec![0.into(), 1.into(), "hello".into()])
+        .expect("failed to insert");
+    mutb.insert(vec![0.into(), 2.into(), "heyhey".into()])
+        .expect("failed to insert");
+    let mut view = g.view("answers_union").unwrap().into_sync();
+    println!("looking up");
+    let res = view.lookup(&[0.into()], true).unwrap();
+    assert_eq!(res.len(), 2);
+}
+#[test]
+fn test_permissions_union_different_permissions() {
+    let mut g = start_simple_partial("permissions_union");
+    g.migrate(|mig| {
+        let a = mig.add_base_with_permissions(
+            "answers_alice",
+            &["lec", "q", "answer"],
+            Base::default()
+                .with_key(vec![0, 1])
+                .anonymize_with_resub_key(vec![2]),
+            Some(0b0000_1111),
+        );
+        let b = mig.add_base_with_permissions(
+            "answers_boris",
+            &["lec", "q", "answer"],
+            Base::default()
+                .with_key(vec![0, 1])
+                .anonymize_with_resub_key(vec![2]),
+            Some(0b0000_1101),
+        );
+        let mut emits = HashMap::new();
+        emits.insert(a, vec![0, 1, 2]);
+        emits.insert(b, vec![0, 1, 2]);
+        let u = Union::new(emits);
+        let c = mig.add_ingredient_with_permissions(
+            "answers_union",
+            &["lec", "q", "answer"],
+            u,
+            Some(0b0000_0010),
+        );
+        mig.maintain_anonymous(c, &[0]);
+    });
+    let mut muta = g.table("answers_alice").unwrap().into_sync();
+    let mut mutb = g.table("answers_boris").unwrap().into_sync();
+    println!("Inserting");
+    muta.insert(vec![0.into(), 1.into(), "hello".into()])
+        .expect("failed to insert");
+    mutb.insert(vec![0.into(), 2.into(), "heyhey".into()])
+        .expect("failed to insert");
+    let mut view = g.view("answers_union").unwrap().into_sync();
+    println!("looking up");
+    let res = view.lookup(&[0.into()], true).unwrap();
+    assert_eq!(res.len(), 1);
+    assert_eq!(res, vec![vec![0.into(), 1.into(), "hello".into()]]);
+}
+
+#[test]
+fn test_permissions_union_and_aggreggations_different_permissions() {
+    let mut g = start_simple_partial("permissions_union");
+    g.migrate(|mig| {
+        let a = mig.add_base_with_permissions(
+            "answers_alice",
+            &["lec", "q", "answer"],
+            Base::default()
+                .with_key(vec![0, 1])
+                .anonymize_with_resub_key(vec![2]),
+            Some(0b0000_1100),
+        );
+        let ac = mig.add_ingredient_with_permissions(
+            "qcount_a",
+            &["lec", "qcount"],
+            Aggregation::COUNT.over(a, 1, &[0]),
+            Some(0b0000_0011),
+        );
+        let b = mig.add_base_with_permissions(
+            "answers_boris",
+            &["lec", "q", "answer"],
+            Base::default()
+                .with_key(vec![0, 1])
+                .anonymize_with_resub_key(vec![2]),
+            Some(0b0000_1100),
+        );
+        let bc = mig.add_ingredient_with_permissions(
+            "qcount_b",
+            &["lec", "qcount"],
+            Aggregation::COUNT.over(b, 1, &[0]),
+            Some(0b0000_0001),
+        );
+
+        let mut emits = HashMap::new();
+        emits.insert(ac, vec![0, 1]);
+        emits.insert(bc, vec![0, 1]);
+        let u = Union::new(emits);
+        let c = mig.add_ingredient("answers_union", &["lec", "qcount"], u);
+
+        let res = mig.add_ingredient(
+            "res",
+            &["lec", "qcount"],
+            Project::new(c, &[0, 1], Some(vec![0.into()]), None),
+        );
+        mig.maintain_anonymous(res, &[2]);
+    });
+    let mut muta = g.table("answers_alice").unwrap().into_sync();
+    let mut mutb = g.table("answers_boris").unwrap().into_sync();
+    println!("Inserting");
+    muta.insert(vec![1.into(), 1.into(), "hello".into()])
+        .expect("failed to insert");
+    mutb.insert(vec![0.into(), 2.into(), "heyhey".into()])
+        .expect("failed to insert");
+    let mut view = g.view("res").unwrap().into_sync();
+    println!("looking up");
+    let res = view.lookup(&[0.into()], true).unwrap();
+    println!("graphviz: {}", g.graphviz().unwrap());
+    assert_eq!(res.len(), 0);
+    println!("res: {:?}", res);
+}
+
+#[test]
+fn test_permissions_partial_with_stateful_nodes() {
+    let mut g = start_simple_partial("test_permissions_partial_with_stateful_nodes");
+    g.migrate(|mig| {
+        let a = mig.add_base_with_permissions(
+            "answers_alice",
+            &["lec", "q", "answer"],
+            Base::default()
+                .with_key(vec![0, 1])
+                .anonymize_with_resub_key(vec![2]),
+            Some(0b0000_0011),
+        );
+        let ac = mig.add_ingredient_with_permissions(
+            "qcount_a",
+            &["lec", "qcount"],
+            Aggregation::COUNT.over(a, 1, &[0]),
+            Some(0b0000_0001),
+        );
+        let id = mig.add_ingredient_with_permissions(
+            "iden",
+            &["lec", "qcount"],
+            Identity::new(ac),
+            Some(0b0000_0011),
+        );
+        mig.maintain_anonymous(id, &[0]);
+    });
+    let mut muta = g.table("answers_alice").unwrap().into_sync();
+    muta.insert(vec![0.into(), 1.into(), "hello".into()])
+        .expect("failed to insert");
+
+    let mut view = g.view("iden").unwrap().into_sync();
+    let res = view.lookup(&[0.into()], true).unwrap();
+    println!("graphviz: {}", g.graphviz().unwrap());
+    assert_eq!(res.len(), 1);
+    println!("res: {:?}", res);
+}
+
+#[test]
+fn test_permissions_change() {
+    let mut g = start_simple_partial("test_permissions_child_same_as_parent");
+    let (a, b) = g.migrate(|mig| {
+        let a = mig.add_base_with_permissions(
+            "answers_alice",
+            &["lec", "q", "answer"],
+            Base::default()
+                .with_key(vec![0, 1])
+                .anonymize_with_resub_key(vec![2]),
+            Some(0b0000_0011),
+        );
+        let b = mig.add_ingredient(
+            "my_answers",
+            &["lec", "q", "answer"],
+            Project::new(a, &[0, 1, 2], Some(vec![0.into()]), None),
+        );
+        mig.maintain_anonymous(b, &[3]);
+        (a, b)
+    });
+    let mut muta = g.table("answers_alice").unwrap().into_sync();
+    muta.insert(vec![0.into(), 1.into(), "hello".into()])
+        .expect("failed to insert");
+    muta.insert(vec![0.into(), 10.into(), "hey".into()])
+        .expect("failed to insert");
+    let mut view = g.view("my_answers").unwrap().into_sync();
+    let mut res = view.lookup(&[0.into()], true).unwrap();
+    assert_eq!(res.len(), 2);
+    println!("changing permissions");
+    g.change_permissions(a.index() as u32, 0b0000_0010)
+        .expect("failed to change permissions");
+    sleep();
+    println!("Probably done changing permissions");
+    res = view.lookup(&[0.into()], true).unwrap();
+    assert_eq!(res.len(), 2);
+}

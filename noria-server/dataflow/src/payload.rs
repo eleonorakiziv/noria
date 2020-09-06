@@ -89,6 +89,12 @@ pub enum MessagePurpose {
     Other,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ChPermStep {
+    Cleanup,
+    Update,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[allow(clippy::large_enum_variant)]
 pub enum Packet {
@@ -99,6 +105,7 @@ pub enum Packet {
         inner: LocalOrNot<Input>,
         src: Option<SourceChannelIdentifier>,
         senders: Vec<SourceChannelIdentifier>,
+        permissions: u8,
     },
 
     /// Regular data-flow update.
@@ -108,6 +115,17 @@ pub enum Packet {
         data: Records,
         tracer: Tracer,
         purpose: MessagePurpose,
+        permissions: u8,
+    },
+
+    /// Changes permissions to the value specified and updates the node's state
+    ChangePermissions {
+        step: ChPermStep,
+        link: Link,
+        keys: Vec<Vec<DataType>>,
+        data: Records,
+        partial: HashSet<LocalNodeIndex>,
+        permissions: u8, // When step == Cleanup {permissions == old permissions}, else {permissions == new permissions}
     },
 
     /// Update that is part of a tagged data-flow replay path.
@@ -117,6 +135,7 @@ pub enum Packet {
         tag: Tag,
         data: Records,
         context: ReplayPieceContext,
+        permissions: u8,
     },
 
     /// Trigger an eviction from the target node.
@@ -276,6 +295,7 @@ impl Packet {
             }
             Packet::Message { ref link, .. } => link.src,
             Packet::ReplayPiece { ref link, .. } => link.src,
+            Packet::ChangePermissions { ref link, .. } => link.src,
             _ => unreachable!(),
         }
     }
@@ -285,6 +305,7 @@ impl Packet {
             Packet::Input { ref inner, .. } => unsafe { inner.deref() }.dst,
             Packet::Message { ref link, .. } => link.dst,
             Packet::ReplayPiece { ref link, .. } => link.dst,
+            Packet::ChangePermissions { ref link, .. } => link.dst,
             _ => unreachable!(),
         }
     }
@@ -294,6 +315,7 @@ impl Packet {
             Packet::Message { ref mut link, .. } => link,
             Packet::ReplayPiece { ref mut link, .. } => link,
             Packet::EvictKeys { ref mut link, .. } => link,
+            Packet::ChangePermissions { ref mut link, .. } => link,
             _ => unreachable!(),
         }
     }
@@ -302,6 +324,7 @@ impl Packet {
         match *self {
             Packet::Message { ref data, .. } => data.is_empty(),
             Packet::ReplayPiece { ref data, .. } => data.is_empty(),
+            Packet::ChangePermissions { ref data, .. } => data.is_empty(),
             _ => unreachable!(),
         }
     }
@@ -311,9 +334,11 @@ impl Packet {
         F: FnOnce(&mut Records),
     {
         match *self {
+            Packet::ChangePermissions { ref mut data, .. } => map(data),
             Packet::Message { ref mut data, .. } | Packet::ReplayPiece { ref mut data, .. } => {
                 map(data);
             }
+
             _ => {
                 unreachable!();
             }
@@ -323,6 +348,7 @@ impl Packet {
     crate fn is_regular(&self) -> bool {
         match *self {
             Packet::Message { .. } => true,
+            Packet::ChangePermissions { .. } => true,
             _ => false,
         }
     }
@@ -339,6 +365,7 @@ impl Packet {
         match *self {
             Packet::Message { ref data, .. } => data,
             Packet::ReplayPiece { ref data, .. } => data,
+            Packet::ChangePermissions { ref data, .. } => data,
             _ => unreachable!(),
         }
     }
@@ -348,9 +375,28 @@ impl Packet {
         let inner = match *self {
             Packet::Message { ref mut data, .. } => data,
             Packet::ReplayPiece { ref mut data, .. } => data,
+            Packet::ChangePermissions { ref mut data, .. } => data,
             _ => unreachable!(),
         };
         mem::replace(inner, Records::default())
+    }
+
+    crate fn get_permissions(&self) -> u8 {
+        match *self {
+            Packet::Message {
+                ref permissions, ..
+            } => *permissions,
+            Packet::Input {
+                ref permissions, ..
+            } => *permissions,
+            Packet::ReplayPiece {
+                ref permissions, ..
+            } => *permissions,
+            Packet::ChangePermissions {
+                ref permissions, ..
+            } => *permissions,
+            _ => unreachable!(),
+        }
     }
 
     crate fn clone_data(&self) -> Self {
@@ -360,23 +406,42 @@ impl Packet {
                 ref data,
                 ref tracer,
                 ref purpose,
+                ref permissions,
             } => Packet::Message {
                 link,
                 data: data.clone(),
                 tracer: tracer.clone(),
                 purpose: purpose.clone(),
+                permissions: permissions.clone(),
             },
             Packet::ReplayPiece {
                 link,
                 tag,
                 ref data,
                 ref context,
+                ref permissions,
             } => Packet::ReplayPiece {
                 link,
                 tag,
                 data: data.clone(),
                 context: context.clone(),
+                permissions: permissions.clone(),
             },
+            Packet::ChangePermissions {
+                ref step,
+                link,
+                ref data,
+                ref permissions,
+                ..
+            } => Packet::ChangePermissions {
+                step: step.clone(),
+                link,
+                keys: Vec::default(),
+                data: data.clone(),
+                partial: HashSet::new(),
+                permissions: permissions.clone(),
+            },
+
             _ => unreachable!(),
         }
     }
@@ -445,6 +510,18 @@ impl fmt::Debug for Packet {
                 link,
                 tag.id(),
                 data.len()
+            ),
+            Packet::ChangePermissions {
+                ref link,
+                ref permissions,
+                ref partial,
+                ..
+            } => write!(
+                f,
+                "Packet::ChangePermissions(link: {:?}, permissions: {:?}, partial: {:?})",
+                link,
+                permissions,
+                partial.clone(),
             ),
             ref p => {
                 use std::mem;

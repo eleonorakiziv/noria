@@ -29,6 +29,7 @@ pub struct Node {
     domain: Option<domain::Index>,
 
     pub fields: Vec<String>,
+    pub permissions: u8,
     parents: Vec<LocalNodeIndex>,
     children: Vec<LocalNodeIndex>,
     inner: NodeType,
@@ -64,6 +65,35 @@ impl Node {
             children: Vec::new(),
             inner: inner.into(),
             taken: false,
+            permissions: 0b0000_0000,
+            purge: false,
+            sharded_by: Sharding::None,
+        }
+    }
+
+    pub fn new_with_permissions<S1, FS, S2, NT>(
+        name: S1,
+        fields: FS,
+        inner: NT,
+        permissions: u8,
+    ) -> Node
+    where
+        S1: ToString,
+        S2: ToString,
+        FS: IntoIterator<Item = S2>,
+        NT: Into<NodeType>,
+    {
+        Node {
+            name: name.to_string(),
+            index: None,
+            domain: None,
+
+            fields: fields.into_iter().map(|s| s.to_string()).collect(),
+            parents: Vec::new(),
+            children: Vec::new(),
+            inner: inner.into(),
+            taken: false,
+            permissions: permissions,
 
             purge: false,
 
@@ -72,10 +102,16 @@ impl Node {
     }
 
     pub fn mirror<NT: Into<NodeType>>(&self, n: NT) -> Node {
+        if self.permissions != 0 {
+            return Self::new_with_permissions(&*self.name, &self.fields, n, self.permissions);
+        }
         Self::new(&*self.name, &self.fields, n)
     }
 
     pub fn named_mirror<NT: Into<NodeType>>(&self, n: NT, name: String) -> Node {
+        if self.permissions != 0 {
+            return Self::new_with_permissions(name, &self.fields, n, self.permissions);
+        }
         Self::new(name, &self.fields, n)
     }
 }
@@ -255,6 +291,58 @@ impl Node {
     pub fn index(&self) -> Option<IndexPair> {
         self.index
     }
+
+    pub fn get_permissions(&self) -> u8 {
+        if let NodeType::Base(..) = self.inner {
+            self.permissions
+        } else {
+            self.permissions ^ 0b1000_0000
+        }
+    }
+
+    /// Sets the application-specific permissions for node operators (except for bases)
+    pub fn set_permissions(&mut self, permissions: u8) {
+        // the first bit should not be set
+        if permissions & 0b1000_0000 != 0 {
+            return;
+        }
+        if let NodeType::Base(..) = self.inner {
+            // base permissions are set by a user
+            self.permissions = permissions;
+        } else {
+            // permissions set by the application
+            self.permissions = permissions | 0b1000_0000;
+        }
+    }
+
+    // Sets the parent-specific permissions
+    pub fn update_permissions(&mut self, new: u8) {
+        // the first bit is set, then it is required by application => we do not update it
+        if self.permissions & 0b1000_0000 != 0 {
+            return;
+        }
+        self.permissions = new;
+    }
+
+    pub fn can_propagate(&self, parent_permissions: u8) -> bool {
+        let first_bit_excluded = |perm: u8| -> u8 {
+            if perm & 0b1000_0000 != 0 {
+                perm ^ 0b1000_0000
+            } else {
+                perm
+            }
+        };
+        let my = first_bit_excluded(self.permissions);
+        let parent = first_bit_excluded(parent_permissions);
+        (parent & my) == my
+    }
+
+    pub fn get_emits(&mut self) -> HashMap<NodeIndex, Vec<usize>> {
+        match self.inner {
+            NodeType::Internal(ref i) => i.get_emits(),
+            _ => HashMap::new(),
+        }
+    }
 }
 
 // events
@@ -272,6 +360,7 @@ impl Node {
         n.domain = self.domain;
         n.purge = self.purge;
         self.taken = true;
+        n.permissions = self.permissions;
 
         DanglingDomainNode(n)
     }

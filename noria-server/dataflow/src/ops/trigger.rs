@@ -178,6 +178,10 @@ impl Ingredient for Trigger {
             self.src = ip;
         }
     }
+
+    fn get_emits(&self) -> HashMap<NodeIndex, Vec<usize>> {
+        unimplemented!()
+    }
 }
 
 #[cfg(test)]

@@ -9,7 +9,7 @@ use dataflow::node::special::Base;
 use dataflow::node::ParentInfo;
 use dataflow::ops::project::Project;
 use dataflow::ops::union::Emit;
-use dataflow::payload::MessagePurpose;
+use dataflow::payload::{ChPermStep, MessagePurpose};
 use dataflow::prelude::*;
 use dataflow::{node, payload::ControlReplyPacket, prelude::Packet, DomainBuilder, DomainConfig};
 use hyper::{self, Method, StatusCode};
@@ -18,12 +18,13 @@ use nom_sql::ColumnSpecification;
 use noria::builders::*;
 use noria::channel::tcp::{SendError, TcpSender};
 use noria::consensus::{Authority, Epoch, STATE_KEY};
-use noria::data::Lease;
+use noria::data::{Lease, PermissionsChange};
 use noria::debug::stats::{DomainStats, GraphStats, NodeStats};
 use noria::prelude::SyncView;
 use noria::{ActivationResult, SyncTable};
 use petgraph::visit::Bfs;
 use slog::Logger;
+use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::mem;
 use std::net::SocketAddr;
@@ -93,6 +94,7 @@ struct Table {
     primary_key: Option<Vec<usize>>,
     rows: Option<Vec<Vec<DataType>>>,
     resub_key: Option<Vec<usize>>,
+    permissions: u8,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -355,6 +357,12 @@ impl ControllerInner {
             (Method::POST, "/import_data") => json::from_slice(&body)
                 .map_err(|_| StatusCode::BAD_REQUEST)
                 .map(|args| self.import_data(args).map(|r| json::to_string(&r).unwrap())),
+            (Method::POST, "/change_permissions") => json::from_slice(&body)
+                .map_err(|_| StatusCode::BAD_REQUEST)
+                .map(|args| {
+                    self.change_permissions(args)
+                        .map(|r| json::to_string(&r).unwrap())
+                }),
             _ => Err(StatusCode::NOT_FOUND),
         }
     }
@@ -526,8 +534,18 @@ impl ControllerInner {
         Ok(())
     }
 
-    pub fn send_records(&mut self, ni: NodeIndex, data: Records, purpose: MessagePurpose) {
+    pub fn send_message(
+        &mut self,
+        ni: NodeIndex,
+        data: Records,
+        purpose: MessagePurpose,
+        permissions: Option<u8>,
+    ) {
         let node = &mut self.ingredients[ni.clone()];
+        let permissions = match permissions {
+            Some(perm) => perm,
+            None => node.get_permissions(),
+        };
         match self
             .domains
             .get_mut(&node.domain())
@@ -538,6 +556,7 @@ impl ControllerInner {
                     data,
                     tracer: None,
                     purpose,
+                    permissions,
                 },
                 &self.workers,
             ) {
@@ -1311,7 +1330,7 @@ impl ControllerInner {
 
     pub fn unsubscribe(&mut self, ni: u32) -> Result<(), String> {
         let node = NodeIndex::from(ni);
-        self.send_records(node, Default::default(), MessagePurpose::Unsubscribe);
+        self.send_message(node, Default::default(), MessagePurpose::Unsubscribe, None);
         self.ingredients[node].remove();
         Ok(())
     }
@@ -1413,10 +1432,7 @@ impl ControllerInner {
                         .neighbors_directed(parent, petgraph::EdgeDirection::Outgoing)
                         .count() == 0
                 {
-                    if !self.recipe.sql_inc().is_leaf_address(parent) {
-                        // check if it is still included in the recipe
-                        nodes.push(parent);
-                    }
+                    nodes.push(parent);
                 }
             }
 
@@ -1436,7 +1452,8 @@ impl ControllerInner {
         children: HashMap<LocalNodeIndex, Option<Emit>>,
     ) -> Result<(), String> {
         // Remove node from controller local state
-        let mut domain_removals: HashMap<DomainIndex, Vec<(LocalNodeIndex, NodeIndex)>> = HashMap::default();
+        let mut domain_removals: HashMap<DomainIndex, Vec<(LocalNodeIndex, NodeIndex)>> =
+            HashMap::default();
         for ni in removals {
             self.ingredients[*ni].remove();
             debug!(self.log, "Removed node {}", ni.index());
@@ -1569,7 +1586,6 @@ impl ControllerInner {
     }
 
     fn export_data(&mut self, ts: Vec<u32>) -> Result<String, String> {
-        //TODO: verify that tableid provided are corresponding to the shard name
         let tables: Vec<NodeIndex> = ts.into_iter().map(|i| NodeIndex::from(i as u32)).collect();
         let mut metadata: Vec<Table> = Vec::new();
         for ni in tables.into_iter() {
@@ -1595,34 +1611,38 @@ impl ControllerInner {
                 rows: None,
                 primary_key: Some(primary_key),
                 resub_key: Some(resub_key),
+                permissions: node.get_permissions(),
             });
         }
 
         let view_nis = self.migrate(|mig| {
-            let mut nis = HashMap::new();
+            let mut nis = Vec::new();
             for table in metadata.clone().into_iter() {
                 let view_name = format!("{}_lookup", table.name);
-                let fields: Vec<usize> = (0..table.fields.len()).collect();
-                let new_view = mig.add_ingredient(
+                let fields_len = table.fields.len();
+                let mut fields = table.fields;
+                fields.push("bogokey".to_string());
+                let f: Vec<usize> = (0..fields_len.clone()).collect();
+                let new_view = mig.add_ingredient_with_permissions(
                     &view_name,
-                    &table.fields,
-                    Project::new(table.ni, &fields, Some(vec![0.into()]), None),
+                    &fields,
+                    Project::new(table.ni, &f, Some(vec![0.into()]), None),
+                    Some(table.permissions),
                 );
-                mig.maintain_anonymous(new_view, &[table.fields.len()]);
-                nis.entry(table.name).or_insert_with(|| new_view);
+                mig.maintain_anonymous(new_view, &[fields_len]);
+                nis.push(new_view);
             }
             nis
         });
         // collect indices to be removed
         let mut nodes_to_remove = Vec::new();
-        for (_, ni) in view_nis.clone() {
+        for ni in view_nis {
             // we have added a projection and a reader, so let's delete them
-            self
-                .ingredients
+            self.ingredients
                 .neighbors_directed(ni, petgraph::EdgeDirection::Outgoing)
-                .for_each(|ni| nodes_to_remove.push(ni));
+                .for_each(|c| nodes_to_remove.push(c));
             nodes_to_remove.push(ni);
-        };
+        }
 
         let mut ts = Vec::new();
         let mut json_string = "".to_string();
@@ -1632,7 +1652,7 @@ impl ControllerInner {
             let vb = self.view_builder(&view);
             let view = vb.map(|vb| vb.build(x.clone()).wait().unwrap()).unwrap();
             let res = view.lookup(&[0.into()], true).wait().unwrap().1;
-            let rows: Vec<Vec<_>> = res
+            let rows: Vec<Vec<DataType>> = res
                 .into_iter()
                 .map(|mut r| {
                     // eliminate bogokeys from each response
@@ -1646,37 +1666,107 @@ impl ControllerInner {
 
         // add to result
         let tables = Tables { t: ts };
-        let json = serde_json::to_string(&tables).unwrap();
+        let json = serde_json::to_string_pretty(&tables).unwrap();
         json_string.push_str(&json);
-
-        for node in nodes_to_remove.into_iter() {
-            if self.ingredients[node].is_reader() && self.materializations.initialized_readers.contains(&node){
-                self.materializations.initialized_readers.remove(&node);
+        nodes_to_remove.sort_by(|a, b| b.cmp(a));
+        let mut i = 0;
+        while i < nodes_to_remove.len() {
+            let ni = nodes_to_remove[i];
+            let domain = self.ingredients[ni].domain();
+            let laddr = self.ingredients[ni].local_addr();
+            if self.ingredients[ni].is_reader() {
+                if self.materializations.initialized_readers.contains(&ni) {
+                    self.materializations.initialized_readers.remove(&ni);
+                }
+                if self.materializations.paths_ending_at.contains_key(&ni) {
+                    self.materializations.paths_ending_at.remove(&ni);
+                }
+                self.remove_leaf(ni).expect("failed to remove the view");
             }
-            self.remove_leaf(node).expect("failed to remove the view");
-            self.ingredients.remove_node(node);
+            self.ingredients.remove_node(ni);
+            // remove the parent
+            self.ingredients.remove_node(nodes_to_remove[i + 1]);
+            i += 2;
         }
         Ok(json_string)
     }
 
-    fn remove_base(&mut self, base: NodeIndex) -> Result<Vec<NodeIndex>, String> {
+    fn remove_base(&mut self, base: NodeIndex) -> Result<HashMap<NodeIndex, Vec<usize>>, String> {
         let index = self.ingredients[base].index().clone();
-        let children: Vec<NodeIndex> = self
+        let parent_fields: Vec<_> = (0..self.ingredients[base].fields().len()).collect();
+        let mut children_with_fields = HashMap::new();
+
+        let mut ch: Vec<NodeIndex> = self
             .ingredients
             .neighbors_directed(base, petgraph::EdgeDirection::Outgoing)
             .collect();
 
-        let unions: HashSet<NodeIndex> = children
+        let unions: HashSet<NodeIndex> = ch
             .clone()
             .into_iter()
             .filter(|&ni| self.ingredients[ni].is_union())
             .collect();
+        for i in 0..ch.len() {
+            let child = &mut self.ingredients[ch[i]];
+            if child.is_egress() {
+                let mut stack = Vec::new();
+                stack.push(ch[i]);
+                let mut prev = base;
+                let mut chi = ch[i];
+                while !stack.is_empty() {
+                    chi = stack.pop().unwrap();
+                    let edge = self.ingredients.find_edge(prev, chi).unwrap();
+                    self.ingredients.remove_edge(edge);
+                    if !self.ingredients[chi].is_egress() && !self.ingredients[chi].is_ingress() {
+                        let e = self.ingredients[chi].get_emits();
+                        let fields = e.get(&prev).expect("emits from such parent do not exist");
+                        children_with_fields.insert(chi, fields.clone());
+
+                        let mut ch_with_meta = HashMap::new();
+                        ch_with_meta.insert(self.ingredients[chi].local_addr(), None);
+                        self.notify_domain(&vec![prev], ch_with_meta)
+                            .expect("failed to let domain know of removal");
+                        continue;
+                    }
+                    let grands: Vec<_> = self
+                        .ingredients
+                        .neighbors_directed(chi, petgraph::EdgeDirection::Outgoing)
+                        .collect();
+
+                    for c in grands {
+                        stack.push(c);
+                    }
+                    prev = chi;
+                }
+                ch[i] = chi;
+            }
+        }
+        ch.clone().into_iter().for_each(|c| {
+            let e = self.ingredients[c].get_emits();
+            if e.is_empty() {
+                children_with_fields
+                    .entry(c)
+                    .or_insert(parent_fields.clone());
+            } else {
+                match children_with_fields.entry(c) {
+                    Vacant(entry) => {
+                        let v = e.get(&base).expect("emits from such parent do not exist");
+                        entry.insert(v.to_vec());
+                    }
+                    Occupied(_) => {}
+                };
+            };
+        });
 
         let mut children_with_metadata: HashMap<LocalNodeIndex, Option<Emit>> = HashMap::new();
 
-        for child in children.clone().into_iter() {
-            let edge = self.ingredients.find_edge(base, child).unwrap();
+        for child in ch.into_iter() {
+            let edge = match self.ingredients.find_edge(base, child) {
+                Some(e) => e,
+                None => continue,
+            };
             let child_node = &mut self.ingredients[child];
+
             if !unions.contains(&child) {
                 children_with_metadata
                     .entry(child_node.local_addr())
@@ -1704,7 +1794,7 @@ impl ControllerInner {
         self.notify_domain(&vec![base], children_with_metadata)
             .expect("failed to let domain know of removal");
 
-        Ok(children)
+        Ok(children_with_fields)
     }
 
     fn import_data(&mut self, serialized: String) -> Result<Vec<u32>, String> {
@@ -1719,7 +1809,7 @@ impl ControllerInner {
                 Some(resub_key) => {
                     if !resub_key.is_empty() {
                         // remove the contents of the anonymized base
-                        self.send_records(ni, Default::default(), MessagePurpose::Clear);
+                        self.send_message(ni, Default::default(), MessagePurpose::Clear, None);
                         true
                     } else {
                         false
@@ -1739,28 +1829,101 @@ impl ControllerInner {
                 Some(k) => k.to_vec(),
                 None => vec![],
             };
+            let permissions = table.permissions.clone();
             let data: Records = table.rows.unwrap().into();
-            let children = self.remove_base(ni).expect("failed to remove base");
-
-            let new_fields: Vec<_> = (0..table.fields.len()).collect();
+            let children_with_fields = self.remove_base(ni).expect("failed to remove base");
 
             let new = self.migrate(|mig| {
                 let mut base = Base::default().with_key(primary_key);
                 if anonymized {
                     base = base.anonymize_with_resub_key(resub_keys.unwrap());
                 }
-                let new_base = mig.add_base(name, fields, base);
-                for child in children.into_iter() {
-                    // TODO(ekiziv): Instead of mimicking the fields of the base, figure out what fields union collects from parents.
-                    mig.add_parent(new_base, child, new_fields.clone());
+                let new_base = mig.add_base_with_permissions(name, fields, base, Some(permissions));
+                for (child, fields) in children_with_fields.into_iter() {
+                    mig.add_parent(new_base, child, fields.to_vec());
                 }
                 new_base
             });
-            self.send_records(new.clone(), data, MessagePurpose::Subscribe);
+            self.send_message(new.clone(), data, MessagePurpose::Subscribe, None);
             assert!(self.ingredients[new].is_base());
             new_bases.push(new.index() as u32);
         }
         Ok(new_bases)
+    }
+
+    fn send_change_permissions(
+        &mut self,
+        permissions: u8,
+        partial: HashSet<LocalNodeIndex>,
+        step: ChPermStep,
+        addr: LocalNodeIndex,
+        domain: DomainIndex,
+    ) {
+        match self.domains.get_mut(&domain).unwrap().send_to_healthy(
+            box Packet::ChangePermissions {
+                step,
+                link: Link::new(addr, addr),
+                keys: Vec::default(),
+                data: Default::default(),
+                partial,
+                permissions,
+            },
+            &self.workers,
+        ) {
+            Ok(_) => (),
+            Err(e) => match e {
+                SendError::IoError(ref ioe) => {
+                    if ioe.kind() == io::ErrorKind::BrokenPipe
+                        && ioe.get_ref().unwrap().description() == "worker failed"
+                    {
+                        // message would have gone to a failed worker, so ignore error
+                    } else {
+                        panic!("failed to send negative records: {:?}", e);
+                    }
+                }
+                _ => {
+                    panic!("failed to send negative records nodes: {:?}", e);
+                }
+            },
+        }
+    }
+
+    fn change_permissions(&mut self, message: PermissionsChange) -> Result<(), String> {
+        let base_ni = NodeIndex::from(message.ni);
+        let new = message.to;
+        if self.ingredients[base_ni].get_permissions() == new {
+            return Ok(());
+        }
+        let base_domain = &self.ingredients[base_ni].domain();
+        let my_addr = self.ingredients[base_ni].local_addr();
+
+        let children: Vec<_> = self
+            .ingredients
+            .neighbors_directed(base_ni, petgraph::EdgeDirection::Outgoing)
+            .collect();
+        let partial: HashSet<_> = children
+            .into_iter()
+            .filter_map(|ni| {
+                if self.materializations.is_partial(ni) {
+                    Some(self.ingredients[ni].local_addr().clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let old = self.ingredients[base_ni].get_permissions();
+        self.send_change_permissions(
+            old,
+            partial.clone(),
+            ChPermStep::Cleanup,
+            my_addr,
+            *base_domain,
+        );
+        self.ingredients[base_ni].update_permissions(new);
+        self.send_change_permissions(new, partial, ChPermStep::Update, my_addr, *base_domain);
+
+        Ok(())
     }
 }
 

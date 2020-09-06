@@ -188,6 +188,10 @@ impl Ingredient for Distinct {
             self.src = ip;
         }
     }
+
+    fn get_emits(&self) -> HashMap<NodeIndex, Vec<usize>> {
+        unimplemented!()
+    }
 }
 
 /// Tests for the Distinct Operator

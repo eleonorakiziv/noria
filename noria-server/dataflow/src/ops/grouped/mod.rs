@@ -329,4 +329,7 @@ where
     fn update_unassigned(&mut self, _ip: IndexPair, _pi: NodeIndex) {
         unimplemented!("update_unassigned not supported for grouped operators");
     }
+    fn get_emits(&self) -> HashMap<NodeIndex, Vec<usize>> {
+        unimplemented!();
+    }
 }

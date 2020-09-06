@@ -259,6 +259,7 @@ impl Replica {
                         inner: input,
                         src: Some(SourceChannelIdentifier { token, tag }),
                         senders: Vec::new(),
+                        permissions: 0b0000_0000,
                     })
                 })
             } else {

@@ -70,7 +70,13 @@ impl<'a> Migration<'a> {
     /// Edges in the data flow graph are automatically added based on the ingredient's reported
     /// `ancestors`.
     // crate viz for tests
-    pub fn add_ingredient<S1, FS, S2, I>(&mut self, name: S1, fields: FS, i: I) -> NodeIndex
+    pub fn add_ingredient_with_permissions<S1, FS, S2, I>(
+        &mut self,
+        name: S1,
+        fields: FS,
+        i: I,
+        permissions: Option<u8>,
+    ) -> NodeIndex
     where
         S1: ToString,
         S2: ToString,
@@ -81,6 +87,19 @@ impl<'a> Migration<'a> {
         i.on_connected(&self.mainline.ingredients);
         let parents = i.ancestors();
         assert!(!parents.is_empty());
+
+        match permissions {
+            Some(p) => i.set_permissions(p),
+            None => {
+                // setting permissions
+                let mut least = 0b1111_1111;
+                for parent in &parents {
+                    let parent_perm = self.mainline.ingredients[*parent].get_permissions();
+                    least = least & parent_perm;
+                }
+                i.update_permissions(least);
+            }
+        }
 
         // add to the graph
         let ni = self.mainline.ingredients.add_node(i);
@@ -100,15 +119,27 @@ impl<'a> Migration<'a> {
         ni
     }
 
+    /// Adds the given ingredient to Soup with the specified permissions
+    pub fn add_ingredient<S1, FS, S2, I>(&mut self, name: S1, fields: FS, i: I) -> NodeIndex
+    where
+        S1: ToString,
+        S2: ToString,
+        FS: IntoIterator<Item = S2>,
+        I: Into<NodeOperator>,
+    {
+        self.add_ingredient_with_permissions(name, fields, i, None)
+    }
+
     /// Add the given `Base` to the Soup.
     ///
     /// The returned identifier can later be used to refer to the added ingredient.
     // crate viz for tests
-    pub fn add_base<S1, FS, S2>(
+    pub fn add_base_with_permissions<S1, FS, S2>(
         &mut self,
         name: S1,
         fields: FS,
         b: node::special::Base,
+        p: Option<u8>,
     ) -> NodeIndex
     where
         S1: ToString,
@@ -124,6 +155,13 @@ impl<'a> Migration<'a> {
               "adding new base";
               "node" => ni.index(),
         );
+        match p {
+            Some(permissions) => {
+                info!(self.log, "Setting permissions of base to {:?}" => permissions);
+                self.mainline.ingredients[ni].update_permissions(permissions)
+            }
+            None => {}
+        }
 
         // keep track of the fact that it's new
         self.added.insert(ni);
@@ -133,6 +171,24 @@ impl<'a> Migration<'a> {
             .add_edge(self.mainline.source, ni, ());
         // and tell the caller its id
         ni
+    }
+
+    /// Add the given `Base` to the Soup with the specified permissions
+    ///
+    /// The returned identifier can later be used to refer to the added ingredient.
+    // crate viz for tests
+    pub fn add_base<S1, FS, S2>(
+        &mut self,
+        name: S1,
+        fields: FS,
+        b: node::special::Base,
+    ) -> NodeIndex
+    where
+        S1: ToString,
+        S2: ToString,
+        FS: IntoIterator<Item = S2>,
+    {
+        self.add_base_with_permissions(name, fields, b, None)
     }
 
     ///

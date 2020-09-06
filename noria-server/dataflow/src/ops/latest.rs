@@ -171,6 +171,9 @@ impl Ingredient for Latest {
             self.src = ip;
         }
     }
+    fn get_emits(&self) -> HashMap<NodeIndex, Vec<usize>> {
+        unimplemented!()
+    }
 }
 
 #[cfg(test)]

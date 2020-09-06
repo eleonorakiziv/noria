@@ -91,6 +91,10 @@ impl Ingredient for Identity {
             self.src = ip;
         }
     }
+
+    fn get_emits(&self) -> HashMap<NodeIndex, Vec<usize>> {
+        HashMap::default()
+    }
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 use fnv::FnvHashMap;
 use node::NodeType;
 use payload;
-use payload::MessagePurpose;
+use payload::{ChPermStep, MessagePurpose};
 use prelude::*;
 use std::collections::{HashSet, VecDeque};
 use std::mem;
@@ -53,12 +53,14 @@ impl Node {
                         // Send write-ACKs to all the clients with updates that made
                         // it into this merged packet:
                         senders.drain(..).for_each(|src| ex.ack(src));
+                        let new_permissions = self.get_permissions().clone();
 
                         *m = Some(Box::new(Packet::Message {
                             link: Link::new(dst, dst),
                             data: rs,
                             tracer,
                             purpose: MessagePurpose::Other,
+                            permissions: new_permissions,
                         }));
                     }
                     Some(box Packet::Message {
@@ -66,6 +68,7 @@ impl Node {
                         tracer,
                         data,
                         purpose,
+                        ..
                     }) => {
                         let (negatives, positives) = match purpose {
                             MessagePurpose::Unsubscribe => {
@@ -102,13 +105,50 @@ impl Node {
                         }
 
                         neg_rs.append(&mut (pos_rs.into()));
+                        let permissions = self.get_permissions().clone();
 
                         *m = Some(Box::new(Packet::Message {
                             link,
                             data: neg_rs.into(),
                             tracer,
                             purpose: MessagePurpose::Other,
+                            permissions,
                         }));
+                    }
+                    Some(box Packet::ChangePermissions {
+                        step,
+                        link,
+                        partial,
+                        permissions,
+                        ..
+                    }) => {
+                        match step {
+                            ChPermStep::Cleanup => {
+                                // collect negative records
+                                let (keys, rs) = b.keys_to_evict(addr, &*state);
+                                let data = b.process(addr, rs, &*state);
+                                *m = Some(Box::new(Packet::ChangePermissions {
+                                    step,
+                                    link,
+                                    keys,
+                                    data,
+                                    partial,
+                                    permissions,
+                                }))
+                            }
+                            ChPermStep::Update => {
+                                let new_data = b.rows(addr, &*state, true).into();
+                                // collect positive records
+                                *m = Some(Box::new(Packet::ChangePermissions {
+                                    step,
+                                    link,
+                                    keys: Vec::default(),
+                                    data: new_data,
+                                    partial,
+                                    permissions,
+                                }))
+                            }
+                        }
                     }
                     Some(ref p) => {
                         // TODO: replays?

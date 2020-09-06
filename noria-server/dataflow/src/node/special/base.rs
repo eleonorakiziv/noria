@@ -355,6 +355,8 @@ impl Base {
         }
     }
 
+    /// Assembles negative records corresponding to rows in the base.
+    /// Equivalent to clearing the contents of the base and propagating this change down the graph
     pub(in crate::node) fn clear_contents(
         &mut self,
         us: LocalNodeIndex,
@@ -363,12 +365,45 @@ impl Base {
         let db = state
             .get(us)
             .expect("base with primary key must be materialized");
-        let negatives: Vec<Record> = db
-            .cloned_records()
-            .into_iter()
-            .map(|row| Record::Negative(row))
-            .collect();
+        let negatives = db.cloned_records().into_iter().collect();
         self.return_keys_for_delete_operation(negatives)
+            .into_iter()
+            .map(|r| TableOperation::Delete { key: r.to_vec() })
+            .collect()
+    }
+
+    // Returns keys to evict for partial state and table ops for fully materialized nodes
+    pub(in crate::node) fn keys_to_evict(
+        &mut self,
+        us: LocalNodeIndex,
+        state: &StateMap,
+    ) -> (Vec<Vec<DataType>>, Vec<TableOperation>) {
+        let db = state
+            .get(us)
+            .expect("base with primary key must be materialized");
+        let rows = db.cloned_records();
+        (self.return_keys_for_delete_operation(rows), self.clear_contents(us, state))
+    }
+
+    pub(in crate::node) fn rows(
+        &mut self,
+        us: LocalNodeIndex,
+        state: &StateMap,
+        positive: bool,
+    ) -> Vec<Record> {
+        let db = state
+            .get(us)
+            .expect("base with primary key must be materialized");
+        db.cloned_records()
+            .into_iter()
+            .map(|row| {
+                if positive {
+                    Record::Positive(row)
+                } else {
+                    Record::Negative(row)
+                }
+            })
+            .collect()
     }
 
     pub(in crate::node) fn unsubscribe(
@@ -380,11 +415,7 @@ impl Base {
         let db = state
             .get(us)
             .expect("base with primary key must be materialized");
-        let negatives: Vec<Record> = db
-            .cloned_records()
-            .into_iter()
-            .map(|row| Record::Negative(row))
-            .collect();
+        let negatives: Vec<Vec<DataType>> = db.cloned_records().into_iter().collect();
 
         let mut positives = Vec::new();
 
@@ -392,10 +423,8 @@ impl Base {
             Some(resub_keys) => {
                 let mut to_anon: Vec<usize> = (0..fields_len).collect();
                 to_anon.retain(|x| !resub_keys.contains(&x));
-
-                for row in negatives.clone().into_iter() {
-                    let (mut vec, _pos) = row.extract();
-
+                let copy = negatives.clone();
+                for mut vec in copy.into_iter() {
                     for c in 0..vec.len() {
                         if to_anon.contains(&c) {
                             if vec[c].is_integer() || vec[c].is_unsigned_integer() {
@@ -422,7 +451,11 @@ impl Base {
             _ => {}
         }
 
-        let neg_ops = self.return_keys_for_delete_operation(negatives);
+        let neg_ops = self
+            .return_keys_for_delete_operation(negatives)
+            .into_iter()
+            .map(|r| TableOperation::Delete { key: r.to_vec() })
+            .collect();
 
         let pos_ops: Vec<TableOperation> = positives
             .into_iter()
@@ -441,26 +474,28 @@ impl Base {
         positives
     }
 
-    fn return_keys_for_delete_operation(&self, mut negatives: Vec<Record>) -> Vec<TableOperation> {
+    fn return_keys_for_delete_operation(
+        &self,
+        mut negatives: Vec<Vec<DataType>>,
+    ) -> Vec<Vec<DataType>> {
         let mut p_key: Vec<usize> = Vec::new();
         match &self.primary_key {
             Some(k) => p_key = (*k).clone(),
             None => {}
         }
-        let mut neg_ops: Vec<TableOperation> = Vec::new();
+        let mut neg_ops: Vec<Vec<DataType>> = Vec::new();
         for row in negatives.iter_mut() {
             if p_key.is_empty() {
                 // if there is no key, include all the cols
-                p_key = (0..row.rec().len()).collect();
+                p_key = (0..row.len()).collect();
             }
             let keys_vec: Vec<DataType> = row
-                .rec()
                 .into_iter()
                 .enumerate()
                 .filter(|&(i, _)| p_key.contains(&i))
                 .map(|(_, v)| v.clone())
                 .collect();
-            neg_ops.push(TableOperation::Delete { key: keys_vec });
+            neg_ops.push(keys_vec);
         }
         neg_ops
     }

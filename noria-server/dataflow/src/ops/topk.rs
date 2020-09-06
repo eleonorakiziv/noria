@@ -353,6 +353,9 @@ impl Ingredient for TopK {
             self.src = ip;
         }
     }
+    fn get_emits(&self) -> HashMap<NodeIndex, Vec<usize>> {
+        unimplemented!()
+    }
 }
 
 #[cfg(test)]

@@ -94,15 +94,17 @@ impl GroupCommitQueueSet {
         let mut merged_tracer: Tracer = None;
 
         let mut all_senders = vec![];
+        let mut least = 0b1111_1111;
         let merged_data = packets.fold(Vec::new(), |mut acc, p| {
             match *p {
                 Packet::Input {
                     inner,
                     src,
                     senders,
+                    permissions,
                 } => {
                     let Input { dst, data, tracer } = unsafe { inner.take() };
-
+                    least &= permissions;
                     assert_eq!(senders.len(), 0);
                     assert_eq!(merged_dst, dst);
                     acc.extend(data);
@@ -140,6 +142,7 @@ impl GroupCommitQueueSet {
             }),
             src: None,
             senders: all_senders,
+            permissions: least,
         }))
     }
 

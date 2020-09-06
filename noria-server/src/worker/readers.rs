@@ -100,12 +100,15 @@ fn handle_message(
                 let mut ready = true;
                 let mut replaying = false;
 
-
-                let check = |ready: &mut bool, replaying: &mut bool, ret: &mut Vec<Vec<Vec<DataType>>>, keys: &mut Vec<Vec<DataType>>|  {
+                let check = |ready: &mut bool,
+                             replaying: &mut bool,
+                             ret: &mut Vec<Vec<Vec<DataType>>>,
+                             keys: &mut Vec<Vec<DataType>>| {
                     let mut readers_cache = cache.borrow_mut();
                     let reader = readers_cache.entry(target).or_insert_with(|| {
                         let readers = s.lock().unwrap();
-                        readers.get(&target).unwrap().clone()
+                        let r = readers.get(&target).unwrap().clone();
+                        r
                     });
                     // first do non-blocking reads for all keys to see if we can return immediately
                     let found = keys
@@ -123,7 +126,6 @@ fn handle_message(
                                 *key = vec![];
                             }
                             Err(()) => {
-                                println!("key: {:?}, v: {:?}", key.clone(), v.clone());
                                 // map not yet ready
                                 *ready = false;
                                 *key = vec![];
@@ -152,11 +154,8 @@ fn handle_message(
                         let mut readers_cache = cache.borrow_mut();
                         readers_cache.remove(&target);
                     }
-                    let mut ret = Vec::with_capacity(keys_len.clone());
-                    ret.resize(keys_len, Vec::new());
-                    let mut ready = true;
-                    let mut replaying = false;
-                    println!("Checking second time!");
+                    ready = true;
+                    replaying = false;
                     check(&mut ready, &mut replaying, &mut ret, &mut keys.clone());
                     if !ready {
                         return Ok(Tagged {

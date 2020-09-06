@@ -58,7 +58,7 @@ pub(in crate::controller) struct Materializations {
 
     tag_generator: AtomicUsize,
 
-    paths_ending_at: HashMap<NodeIndex, Vec<Vec<(NodeIndex, Vec<Option<usize>>)>>>, // paths ending at a specific NodeIndex
+    pub(crate) paths_ending_at: HashMap<NodeIndex, Vec<Vec<(NodeIndex, Vec<Option<usize>>)>>>, // paths ending at a specific NodeIndex
     pub(crate) initialized_readers: HashSet<NodeIndex>,
     new_parents: HashSet<NodeIndex>,
 }
@@ -101,6 +101,9 @@ impl Materializations {
 }
 
 impl Materializations {
+    pub(in crate::controller) fn is_partial(&self, ni: NodeIndex) -> bool {
+        self.partial.contains(&ni)
+    }
     fn next_tag(&self) -> Tag {
         Tag(self.tag_generator.fetch_add(1, Ordering::SeqCst) as u32)
     }
@@ -205,9 +208,14 @@ impl Materializations {
             // include resub_key indices, if any
             if n.is_base() {
                 let keys = n.suggest_secondary_indexes(ni);
-                keys.into_iter().filter(|(_, resub_keys)| !resub_keys.is_empty()).for_each(|(ni, resub_keys)| {
-                    lookup_obligations.entry(ni).or_insert_with(HashSet::new).insert(resub_keys);
-                });
+                keys.into_iter()
+                    .filter(|(_, resub_keys)| !resub_keys.is_empty())
+                    .for_each(|(ni, resub_keys)| {
+                        lookup_obligations
+                            .entry(ni)
+                            .or_insert_with(HashSet::new)
+                            .insert(resub_keys);
+                    });
             }
 
             for (ni, (cols, lookup)) in indices {
@@ -1025,7 +1033,7 @@ impl Materializations {
                 } else {
                     debug!(self.log, "no need to replay non-materialized view"; "node" => ni.index());
                 }
-                self.new_parents.clear();
+                self.new_parents.remove(&ni);
             }
             return;
         }

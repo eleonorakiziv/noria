@@ -332,6 +332,16 @@ impl Ingredient for Project {
             self.src = ip;
         }
     }
+
+    fn get_emits(&self) -> HashMap<NodeIndex, Vec<usize>> {
+        let mut emits = HashMap::new();
+        let e = match self.emit.as_ref() {
+            Some(e) => e,
+            None => return emits,
+        };
+        emits.insert(self.src.as_global(), e.to_vec());
+        emits
+    }
 }
 
 #[cfg(test)]

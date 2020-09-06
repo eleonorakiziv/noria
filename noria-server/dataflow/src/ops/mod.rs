@@ -238,6 +238,9 @@ impl Ingredient for NodeOperator {
     fn update_unassigned(&mut self, ip: IndexPair, pi: NodeIndex) {
         impl_ingredient_fn_mut!(self, update_unassigned, ip, pi)
     }
+    fn get_emits(&self) -> HashMap<NodeIndex, Vec<usize>> {
+        impl_ingredient_fn_ref!(self, get_emits,)
+    }
 }
 
 #[cfg(test)]
